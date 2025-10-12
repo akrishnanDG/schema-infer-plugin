@@ -1,0 +1,31 @@
+# Real Schema Inference Cloud Configuration
+kafka:
+  bootstrap_servers: "pkc-xxxxx.region.csp.confluent.cloud:9092"
+  security_protocol: "SASL_SSL"
+  cloud_api_key: ""
+  cloud_api_secret: ""
+  auto_offset_reset: "latest"
+
+schema_registry:
+  url: "https://psrc-xxxxx.region.csp.conlfuent.cloud"
+  cloud_api_key: ""
+  cloud_api_secret: ""
+  
+  # Schema compatibility and naming strategy
+  compatibility: "NONE"
+  subject_name_strategy: "TopicNameStrategy"
+
+inference:
+  max_messages: 50
+  timeout: 20
+
+performance:
+  show_progress: true
+  verbose_logging: false
+
+topic_filter:
+  # Main internal topic prefix (Schema Inference Cloud uses "_schema-infer-")
+  internal_prefix: "_"
+  
+  # Whether to exclude internal topics by default
+  exclude_internal: true

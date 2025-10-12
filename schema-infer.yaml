@@ -1,0 +1,87 @@
+# Schema Inference Plugin Configuration
+
+# Kafka Configuration
+kafka:
+  bootstrap_servers: "localhost:9092"
+  security_protocol: "PLAINTEXT"  # PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL
+  consumer_group: "schema-infer-consumer"
+  auto_offset_reset: "earliest"
+  enable_auto_commit: true
+  session_timeout_ms: 30000
+  heartbeat_interval_ms: 10000
+  
+  # Authentication Configuration
+  # For Schema Inference Cloud (API Key/Secret)
+  cloud_api_key: null  # Set your Schema Inference Cloud API key here
+  cloud_api_secret: null  # Set your Schema Inference Cloud API secret here
+  
+  # For Schema Inference Platform (Username/Password)
+  sasl_mechanism: null  # PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+  sasl_username: null
+  sasl_password: null
+  
+  # SSL Configuration
+  ssl_ca_location: null
+  ssl_certificate_location: null
+  ssl_key_location: null
+  ssl_key_password: null
+
+# Schema Registry Configuration
+schema_registry:
+  url: "http://localhost:8081"
+  
+  # Authentication Configuration
+  # For Schema Inference Cloud (API Key/Secret)
+  cloud_api_key: null  # Set your Schema Inference Cloud API key here
+  cloud_api_secret: null  # Set your Schema Inference Cloud API secret here
+  
+  # For Schema Inference Platform (Username/Password)
+  username: null
+  password: null
+  basic_auth_credentials_source: "USER_INFO"
+  
+  # SSL Configuration
+  ssl_ca_location: null
+  ssl_certificate_location: null
+  ssl_key_location: null
+  ssl_key_password: null
+  
+  # Schema Compatibility Level
+  # Options: NONE, BACKWARD, FORWARD, FULL, BACKWARD_TRANSITIVE, FORWARD_TRANSITIVE, FULL_TRANSITIVE
+  compatibility: "NONE"
+  
+  # Subject Name Strategy
+  # Options: TopicNameStrategy, RecordNameStrategy, TopicRecordNameStrategy
+  subject_name_strategy: "TopicNameStrategy"
+
+# Schema Inference Configuration
+inference:
+  max_messages: 50
+  timeout: 30
+  auto_detect_format: true
+  forced_data_format: null
+  confidence_threshold: 0.8
+  sample_size: 100
+  enable_nested_objects: true
+  max_depth: 10
+  array_handling: "union"  # union, first, all
+  null_handling: "optional"  # optional, required, ignore
+
+# Performance Configuration
+performance:
+  background: false
+  max_workers: 8  # Increased for better multithreading performance
+  batch_size: 100
+  memory_limit_mb: 512
+  enable_caching: true
+  cache_ttl: 3600
+  show_progress: true  # Show progress bars during processing
+  verbose_logging: false  # Enable verbose logging for debugging
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: null
+  max_size_mb: 10
+  backup_count: 5

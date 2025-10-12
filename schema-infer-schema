@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""
+Schema Inference Plugin - Schema Command
+Version: 1.2.0
+Build: 2025-10-12-20:15:00
+"""
+
+import sys
+import os
+from pathlib import Path
+
+# Add the plugin directory to Python path
+plugin_dir = Path(__file__).parent
+sys.path.insert(0, str(plugin_dir))
+
+# Suppress librdkafka telemetry messages
+os.environ['KAFKA_LOG_LEVEL'] = '7'
+os.environ['RDKAFKA_LOG_LEVEL'] = '7'
+
+# Import and run the CLI
+from schema_infer.plugin.cli import main
+
+if __name__ == "__main__":
+    main()
