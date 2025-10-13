@@ -284,7 +284,7 @@ Apache License 2.0
 - **📚 Documentation**: [Complete Documentation](DOCUMENTATION.md)
 - **🐛 Issues**: [GitHub Issues](https://github.com/schema-inferinc/schema-infer-plugin/issues)
 - **💬 Discussions**: [GitHub Discussions](https://github.com/schema-inferinc/schema-infer-plugin/discussions)
-- **🏢 Schema Inference Support**: For enterprise customers
+- **🏢 Schema Inference Support**: This is an open source tool, there is no support provided but please feel free to raise and fix issues.
 
 ---
 
