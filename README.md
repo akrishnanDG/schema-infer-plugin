@@ -29,11 +29,20 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 
 ## 🏃‍♂️ Quick Start
 
+### Prerequisites
+
+- Python 3.9+
+- Access to a Kafka cluster
+
 ### Installation
 
 ```bash
-# Install the plugin
-python3 install-plugin.py
+# Clone the repository
+git clone https://github.com/akrishnanDG/schema-infer-plugin.git
+cd schema-infer-plugin
+
+# Install the package and dependencies
+pip install -e .
 
 # Verify installation
 schema-infer --help
