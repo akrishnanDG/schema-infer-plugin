@@ -67,7 +67,6 @@ def run_tests(test_type="all", verbose=False, coverage=False, parallel=False):
     cmd.extend([
         "--tb=short",  # Short traceback format
         "--strict-markers",  # Strict marker checking
-        "--disable-warnings",  # Disable warnings for cleaner output
     ])
     
     print(f"Running tests: {' '.join(cmd)}")
@@ -109,11 +108,10 @@ def run_specific_test(test_file, test_function=None, verbose=False):
         cmd.append("-q")
     
     # Add test file
-    cmd.append(f"tests/{test_file}")
-    
-    # Add specific test function if provided
     if test_function:
-        cmd.append(f"::{test_function}")
+        cmd.append(f"tests/{test_file}::{test_function}")
+    else:
+        cmd.append(f"tests/{test_file}")
     
     print(f"Running specific test: {' '.join(cmd)}")
     print("=" * 60)

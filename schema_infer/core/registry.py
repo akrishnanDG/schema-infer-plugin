@@ -98,11 +98,12 @@ class SchemaRegistry:
                 auth=self.auth,
                 cert=self.cert,
                 verify=self.verify_ssl,
-                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"}
+                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
-            
+
             result = response.json()
             schema_id = result.get("id")
             
@@ -122,7 +123,7 @@ class SchemaRegistry:
                     error_details = e.response.json()
                     self.logger.error(f"Schema Registry error details: {error_details}")
                     raise SchemaRegistryError(f"Schema Registry error: {error_details}")
-                except:
+                except Exception:
                     self.logger.error(f"Failed to register schema: {e}")
                     raise SchemaRegistryError(f"Failed to register schema: {e}")
             else:
@@ -150,12 +151,13 @@ class SchemaRegistry:
                 url,
                 auth=self.auth,
                 cert=self.cert,
-                verify=self.verify_ssl
+                verify=self.verify_ssl,
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
             return response.json()
-            
+
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Failed to get schema {schema_id}: {e}")
             raise SchemaRegistryError(f"Failed to get schema: {e}")
@@ -178,12 +180,13 @@ class SchemaRegistry:
                 url,
                 auth=self.auth,
                 cert=self.cert,
-                verify=self.verify_ssl
+                verify=self.verify_ssl,
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
             return response.json()
-            
+
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Failed to get subject versions for {subject}: {e}")
             raise SchemaRegistryError(f"Failed to get subject versions: {e}")
@@ -206,12 +209,13 @@ class SchemaRegistry:
                 url,
                 auth=self.auth,
                 cert=self.cert,
-                verify=self.verify_ssl
+                verify=self.verify_ssl,
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
             return response.json()
-            
+
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Failed to get latest schema for {subject}: {e}")
             raise SchemaRegistryError(f"Failed to get latest schema: {e}")
@@ -231,12 +235,13 @@ class SchemaRegistry:
                 url,
                 auth=self.auth,
                 cert=self.cert,
-                verify=self.verify_ssl
+                verify=self.verify_ssl,
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
             return response.json()
-            
+
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Failed to list subjects: {e}")
             raise SchemaRegistryError(f"Failed to list subjects: {e}")
@@ -262,12 +267,13 @@ class SchemaRegistry:
                 url,
                 auth=self.auth,
                 cert=self.cert,
-                verify=self.verify_ssl
+                verify=self.verify_ssl,
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
             return response.json()
-            
+
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Failed to delete subject {subject}: {e}")
             raise SchemaRegistryError(f"Failed to delete subject: {e}")
@@ -306,12 +312,13 @@ class SchemaRegistry:
                 auth=self.auth,
                 cert=self.cert,
                 verify=self.verify_ssl,
-                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"}
+                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
             result = response.json()
-            
+
             return result.get("is_compatible", False)
             
         except requests.exceptions.RequestException as e:
@@ -339,12 +346,13 @@ class SchemaRegistry:
                 url,
                 auth=self.auth,
                 cert=self.cert,
-                verify=self.verify_ssl
+                verify=self.verify_ssl,
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
             return response.json()
-            
+
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Failed to get config: {e}")
             raise SchemaRegistryError(f"Failed to get config: {e}")
@@ -370,11 +378,12 @@ class SchemaRegistry:
                 auth=self.auth,
                 cert=self.cert,
                 verify=self.verify_ssl,
-                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"}
+                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
-            
+
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Failed to set config: {e}")
             raise SchemaRegistryError(f"Failed to set config: {e}")
@@ -448,11 +457,12 @@ class SchemaRegistry:
                 auth=self.auth,
                 cert=self.cert,
                 verify=self.verify_ssl,
-                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"}
+                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
+                timeout=(5, 30)
             )
-            
+
             response.raise_for_status()
-            
+
             self.logger.info(f"Successfully set compatibility level for subject '{subject}' to: {compatibility}")
             
         except requests.exceptions.RequestException as e:
@@ -486,8 +496,7 @@ class SchemaRegistry:
                     self.logger.warning("Please verify your Schema Registry URL in the configuration")
             # Suppress other connection test failures to keep output clean
         except Exception as e:
-            # Suppress unexpected errors during connection test
-            pass
+            self.logger.debug(f"Schema Registry connection test encountered unexpected error: {e}")
     
     def _generate_subject_name(self, topic_name: str, schema_format: str) -> str:
         """

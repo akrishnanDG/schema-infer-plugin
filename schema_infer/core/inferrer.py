@@ -2,6 +2,7 @@
 Main schema inference engine that coordinates all components
 """
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
@@ -90,11 +91,15 @@ class SchemaInferrer:
                     
                     # Determine output file path
                     if output_dir:
-                        output_file = f"{output_dir}/{topic_name}.{output_format}"
+                        import re
+                        safe_name = re.sub(r'[^\w\-.]', '_', topic_name)
+                        output_file = str(Path(output_dir) / f"{safe_name}.{output_format}")
                     elif output_path and len(topic_messages) == 1:
                         output_file = output_path
                     else:
-                        output_file = f"{topic_name}.{output_format}"
+                        import re
+                        safe_name = re.sub(r'[^\w\-.]', '_', topic_name)
+                        output_file = f"{safe_name}.{output_format}"
                     
                     # Write schema to file
                     with open(output_file, 'w') as f:
@@ -197,6 +202,7 @@ class SchemaInferrer:
             self.logger.info(f"Processing {len(message_values)} messages for schema inference")
             
             # Detect data format
+            confidence = 1.0
             if self.config.inference.auto_detect_format:
                 detected_format, confidence = self.format_detector.detect_format(message_values)
                 self.logger.info(f"Detected format: {detected_format} (confidence: {confidence:.2f})")

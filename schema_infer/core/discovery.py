@@ -172,7 +172,9 @@ class TopicDiscovery:
         """
         
         try:
-            # Compile regex pattern
+            # Guard against overly complex patterns
+            if len(pattern) > 500:
+                raise ValidationError("Regex pattern too long (max 500 characters)")
             regex = re.compile(pattern)
             
             with KafkaConsumer(self.config) as consumer:

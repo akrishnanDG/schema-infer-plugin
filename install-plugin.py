@@ -48,7 +48,7 @@ def install_requirements():
     
     try:
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "-r", "requirements.txt"
+            sys.executable, "-m", "pip", "install", "-r", str(Path(__file__).parent / "requirements.txt")
         ])
         print("✓ Dependencies installed successfully")
     except subprocess.CalledProcessError as e:
@@ -184,15 +184,10 @@ def create_requirements_file():
         "click>=8.0.0",
         "pydantic>=2.0.0",
         "jsonschema>=4.0.0",
-        "avro-python3>=1.10.0,<1.11.0",
         "protobuf>=4.0.0",
-        "pandas>=1.5.0",
-        "numpy>=1.21.0",
         "tqdm>=4.64.0",
         "pyyaml>=6.0",
-        "python-dotenv>=1.0.0",
         "requests>=2.28.0",
-        "urllib3<2.0",  # Compatible with LibreSSL on macOS
     ]
     
     with open("requirements.txt", "w") as f:
@@ -219,6 +214,10 @@ def main():
     if not install_requirements():
         sys.exit(1)
     
+    # Install package
+    if not install_package():
+        sys.exit(1)
+
     # Install plugin
     if not install_plugin():
         sys.exit(1)

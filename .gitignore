@@ -46,13 +46,16 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# Generated files
+# Generated schema files
 all_schemas/
 *.avsc
 *.proto
-*.json
+# Only ignore generated json schemas in root and output dirs, not test fixtures
+/*.json
 !schema-infer.yaml
-!cc-config.yaml
+!pyproject.toml
+# Config with sensitive keys
+cc-config.yaml
 
 # Test coverage
 htmlcov/
@@ -73,7 +76,7 @@ logs/
 temp/
 tmp/
 
-# Plugin installation
-/Users/akrishnan/bin/schema_infer/
-confluent-schema
-confluent-schema-infer
+# Plugin installation artifacts
+
+# Type checking
+.mypy_cache/

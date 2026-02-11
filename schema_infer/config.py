@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import yaml
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class KafkaConfig(BaseModel):
@@ -29,7 +29,7 @@ class KafkaConfig(BaseModel):
     
     consumer_group: str = Field(default="schema-infer-consumer", description="Consumer group ID")
     auto_offset_reset: str = Field(default="earliest", description="Auto offset reset policy")
-    enable_auto_commit: bool = Field(default=True, description="Enable auto commit")
+    enable_auto_commit: bool = Field(default=False, description="Enable auto commit")
     session_timeout_ms: int = Field(default=30000, description="Session timeout in milliseconds")
     heartbeat_interval_ms: int = Field(default=10000, description="Heartbeat interval in milliseconds")
 
@@ -51,22 +51,24 @@ class SchemaRegistryConfig(BaseModel):
     cloud_api_secret: Optional[str] = Field(default=None, description="Schema Inference Cloud API secret")
     
     # Schema compatibility settings
-    compatibility: str = Field(default="NONE", description="Schema compatibility level (NONE, BACKWARD, FORWARD, FULL, BACKWARD_TRANSITIVE, FORWARD_TRANSITIVE, FULL_TRANSITIVE)")
+    compatibility: str = Field(default="BACKWARD", description="Schema compatibility level (NONE, BACKWARD, FORWARD, FULL, BACKWARD_TRANSITIVE, FORWARD_TRANSITIVE, FULL_TRANSITIVE)")
     
     # Subject name strategy
     subject_name_strategy: str = Field(default="TopicNameStrategy", description="Subject name strategy (TopicNameStrategy, RecordNameStrategy, TopicRecordNameStrategy)")
     
-    @validator('compatibility')
+    @field_validator('compatibility')
+    @classmethod
     def validate_compatibility(cls, v):
         valid_compatibility_levels = {
-            'NONE', 'BACKWARD', 'FORWARD', 'FULL', 
+            'NONE', 'BACKWARD', 'FORWARD', 'FULL',
             'BACKWARD_TRANSITIVE', 'FORWARD_TRANSITIVE', 'FULL_TRANSITIVE'
         }
         if v.upper() not in valid_compatibility_levels:
             raise ValueError(f"Invalid compatibility level: {v}. Must be one of: {', '.join(valid_compatibility_levels)}")
         return v.upper()
-    
-    @validator('subject_name_strategy')
+
+    @field_validator('subject_name_strategy')
+    @classmethod
     def validate_subject_name_strategy(cls, v):
         valid_strategies = {
             'TopicNameStrategy', 'RecordNameStrategy', 'TopicRecordNameStrategy'
@@ -143,67 +145,79 @@ class Config(BaseModel):
     forced_data_format: Optional[str] = Field(default=None)
     background: bool = Field(default=False)
     
-    @validator("bootstrap_servers", always=True)
-    def sync_bootstrap_servers(cls, v, values):
+    @field_validator("bootstrap_servers", mode="before")
+    @classmethod
+    def sync_bootstrap_servers(cls, v, info):
         """Sync bootstrap_servers with kafka config."""
-        if "kafka" in values:
-            values["kafka"].bootstrap_servers = v
+        kafka = info.data.get("kafka")
+        if kafka is not None:
+            kafka.bootstrap_servers = v
         return v
-    
-    @validator("schema_registry_url", always=True)
-    def sync_schema_registry_url(cls, v, values):
+
+    @field_validator("schema_registry_url", mode="before")
+    @classmethod
+    def sync_schema_registry_url(cls, v, info):
         """Sync schema_registry_url with schema_registry config."""
-        if "schema_registry" in values:
-            values["schema_registry"].url = v
+        schema_registry = info.data.get("schema_registry")
+        if schema_registry is not None:
+            schema_registry.url = v
         return v
-    
-    @validator("log_level", always=True)
-    def sync_log_level(cls, v, values):
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def sync_log_level(cls, v, info):
         """Sync log_level with logging config."""
-        if "logging" in values:
-            values["logging"].level = v
+        logging = info.data.get("logging")
+        if logging is not None:
+            logging.level = v
         return v
-    
-    @validator("max_messages", always=True)
-    def sync_max_messages(cls, v, values):
+
+    @field_validator("max_messages", mode="before")
+    @classmethod
+    def sync_max_messages(cls, v, info):
         """Sync max_messages with inference config."""
-        if "inference" in values:
-            values["inference"].max_messages = v
+        inference = info.data.get("inference")
+        if inference is not None:
+            inference.max_messages = v
         return v
-    
-    @validator("timeout", always=True)
-    def sync_timeout(cls, v, values):
+
+    @field_validator("timeout", mode="before")
+    @classmethod
+    def sync_timeout(cls, v, info):
         """Sync timeout with inference config."""
-        if "inference" in values:
-            values["inference"].timeout = v
+        inference = info.data.get("inference")
+        if inference is not None:
+            inference.timeout = v
         return v
-    
-    @validator("auto_detect_format", always=True)
-    def sync_auto_detect_format(cls, v, values):
+
+    @field_validator("auto_detect_format", mode="before")
+    @classmethod
+    def sync_auto_detect_format(cls, v, info):
         """Sync auto_detect_format with inference config."""
-        if "inference" in values:
-            values["inference"].auto_detect_format = v
+        inference = info.data.get("inference")
+        if inference is not None:
+            inference.auto_detect_format = v
         return v
-    
-    @validator("forced_data_format", always=True)
-    def sync_forced_data_format(cls, v, values):
+
+    @field_validator("forced_data_format", mode="before")
+    @classmethod
+    def sync_forced_data_format(cls, v, info):
         """Sync forced_data_format with inference config."""
-        if "inference" in values:
-            values["inference"].forced_data_format = v
+        inference = info.data.get("inference")
+        if inference is not None:
+            inference.forced_data_format = v
         return v
-    
-    @validator("background", always=True)
-    def sync_background(cls, v, values):
+
+    @field_validator("background", mode="before")
+    @classmethod
+    def sync_background(cls, v, info):
         """Sync background with performance config."""
-        if "performance" in values:
-            values["performance"].background = v
+        performance = info.data.get("performance")
+        if performance is not None:
+            performance.background = v
         return v
-    
-    class Config:
-        """Pydantic configuration."""
-        env_prefix = "SCHEMA_INFER_"
-        case_sensitive = False
-        validate_assignment = True
+
+    model_config = {"validate_assignment": True}
 
 
 def load_config(config_path: Optional[Path] = None) -> Config:
@@ -226,12 +240,20 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     env_config = {}
     for key, value in os.environ.items():
         if key.startswith("SCHEMA_INFER_"):
-            # Convert SCHEMA_INFER_KAFKA_BOOTSTRAP_SERVERS to kafka.bootstrap_servers
-            config_key = key[13:].lower().replace("_", ".")
-            env_config[config_key] = value
+            # Convert SCHEMA_INFER_KAFKA_BOOTSTRAP_SERVERS to nested dict
+            parts = key[13:].lower().split("_", 1)
+            if len(parts) == 2:
+                section = parts[0]
+                field = parts[1].replace("__", ".")  # double underscore for nested
+                if section not in env_config:
+                    env_config[section] = {}
+                if isinstance(env_config[section], dict):
+                    env_config[section][field] = value
+            else:
+                env_config[parts[0]] = value
     
-    # Merge configurations (file takes precedence over env)
-    merged_config = {**env_config, **config_data}
+    # Merge configurations (env takes precedence over file)
+    merged_config = {**config_data, **env_config}
     
     # Create Config object with proper structure
     config = Config()
@@ -272,16 +294,28 @@ def load_config(config_path: Optional[Path] = None) -> Config:
 
 
 def save_config(config: Config, config_path: Path) -> None:
-    """Save configuration to file."""
-    
+    """Save configuration to file (secrets are redacted)."""
+
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
+    config_dict = config.model_dump()
+
+    # Redact sensitive fields
+    sensitive_fields = ['password', 'secret', 'ssl_key_password']
+    def redact(d):
+        for key, value in d.items():
+            if isinstance(value, dict):
+                redact(value)
+            elif any(s in key.lower() for s in sensitive_fields) and value is not None:
+                d[key] = "***REDACTED***"
+    redact(config_dict)
+
     with open(config_path, "w") as f:
         if config_path.suffix.lower() in [".yaml", ".yml"]:
-            yaml.dump(config.dict(), f, default_flow_style=False, indent=2)
+            yaml.dump(config_dict, f, default_flow_style=False, indent=2)
         elif config_path.suffix.lower() == ".json":
             import json
-            json.dump(config.dict(), f, indent=2)
+            json.dump(config_dict, f, indent=2)
         else:
             raise ValueError(f"Unsupported config file format: {config_path.suffix}")
 

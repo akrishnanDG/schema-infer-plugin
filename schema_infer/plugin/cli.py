@@ -9,48 +9,8 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-# Suppress librdkafka telemetry messages at the module level
 os.environ['KAFKA_LOG_LEVEL'] = '7'
 os.environ['RDKAFKA_LOG_LEVEL'] = '7'
-# Additional telemetry suppression
-os.environ['RDKAFKA_LOG_LEVEL'] = '7'
-os.environ['KAFKA_LOG_LEVEL'] = '7'
-# Set additional environment variables to suppress telemetry
-os.environ['RDKAFKA_LOG_LEVEL'] = '7'
-os.environ['KAFKA_LOG_LEVEL'] = '7'
-
-# Redirect stderr to suppress librdkafka telemetry messages
-import contextlib
-from io import StringIO
-
-# Create a custom stderr that filters out telemetry messages
-class FilteredStderr:
-    def __init__(self, original_stderr):
-        self.original_stderr = original_stderr
-    
-    def write(self, text):
-        # Filter out librdkafka telemetry messages
-        if not any(pattern in text for pattern in [
-            'GETSUBSCRIPTIONS',
-            'Telemetry client instance id changed',
-            '%6|',
-            'rdkafka#consumer-',
-            'rdkafka#producer-',
-            'rdkafka#',
-            'Telemetry client',
-            'instance id changed'
-        ]):
-            self.original_stderr.write(text)
-    
-    def flush(self):
-        self.original_stderr.flush()
-    
-    def __getattr__(self, name):
-        return getattr(self.original_stderr, name)
-
-# Replace stderr with filtered version
-original_stderr = sys.stderr
-sys.stderr = FilteredStderr(original_stderr)
 
 import click
 

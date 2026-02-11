@@ -4,7 +4,7 @@ Performance optimization utilities for Schema Inference Plugin
 
 import asyncio
 import concurrent.futures
-import multiprocessing
+import threading
 import time
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -244,48 +244,53 @@ class CacheManager:
         self.max_size = max_size
         self.ttl = ttl
         self.cache: Dict[str, Tuple[Any, float]] = {}
+        self._lock = threading.Lock()
         self.logger = get_logger(__name__)
     
     def get(self, key: str) -> Optional[Any]:
         """Get value from cache."""
-        if key not in self.cache:
-            return None
-        
-        value, timestamp = self.cache[key]
-        
-        # Check TTL
-        if time.time() - timestamp > self.ttl:
-            del self.cache[key]
-            return None
-        
-        return value
+        with self._lock:
+            if key not in self.cache:
+                return None
+
+            value, timestamp = self.cache[key]
+
+            # Check TTL
+            if time.time() - timestamp > self.ttl:
+                del self.cache[key]
+                return None
+
+            return value
     
     def set(self, key: str, value: Any) -> None:
         """Set value in cache."""
-        # Remove oldest items if cache is full
-        if len(self.cache) >= self.max_size:
-            oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
-            del self.cache[oldest_key]
-        
-        self.cache[key] = (value, time.time())
+        with self._lock:
+            # Remove oldest items if cache is full
+            if len(self.cache) >= self.max_size:
+                oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
+                del self.cache[oldest_key]
+
+            self.cache[key] = (value, time.time())
     
     def clear(self) -> None:
         """Clear all cached items."""
-        self.cache.clear()
+        with self._lock:
+            self.cache.clear()
     
     def cleanup_expired(self) -> None:
         """Remove expired items from cache."""
-        current_time = time.time()
-        expired_keys = [
-            key for key, (_, timestamp) in self.cache.items()
-            if current_time - timestamp > self.ttl
-        ]
-        
-        for key in expired_keys:
-            del self.cache[key]
-        
-        if expired_keys:
-            self.logger.debug(f"Cleaned up {len(expired_keys)} expired cache items")
+        with self._lock:
+            current_time = time.time()
+            expired_keys = [
+                key for key, (_, timestamp) in self.cache.items()
+                if current_time - timestamp > self.ttl
+            ]
+
+            for key in expired_keys:
+                del self.cache[key]
+
+            if expired_keys:
+                self.logger.debug(f"Cleaned up {len(expired_keys)} expired cache items")
 
 
 class AsyncProcessor:

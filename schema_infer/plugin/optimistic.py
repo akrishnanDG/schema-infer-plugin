@@ -5,19 +5,14 @@ Optimistic message processing for schema inference
 import os
 import sys
 import time
+import uuid
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
-# Set environment variables to suppress librdkafka telemetry messages
+# Suppress librdkafka telemetry messages
 os.environ['KAFKA_LOG_LEVEL'] = '7'
 os.environ['RDKAFKA_LOG_LEVEL'] = '7'
-# Disable telemetry completely
-os.environ['RDKAFKA_LOG_LEVEL'] = '7'
-os.environ['KAFKA_LOG_LEVEL'] = '7'
-# Additional suppression
-os.environ['RDKAFKA_LOG_LEVEL'] = '7'
-os.environ['KAFKA_LOG_LEVEL'] = '7'
 
 import confluent_kafka
 from confluent_kafka import Consumer, KafkaError as ConfluentKafkaError, KafkaException
@@ -30,22 +25,14 @@ from ..utils.logger import get_logger
 
 class SuppressTelemetry:
     """Context manager to suppress librdkafka telemetry messages."""
-    
-    def __init__(self):
-        self.old_stderr = None
-        self.devnull = None
-    
+
     def __enter__(self):
-        self.devnull = open(os.devnull, 'w')
-        self.old_stderr = sys.stderr
-        sys.stderr = self.devnull
+        os.environ['KAFKA_LOG_LEVEL'] = '7'
+        os.environ['RDKAFKA_LOG_LEVEL'] = '7'
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.devnull:
-            self.devnull.close()
-        if self.old_stderr:
-            sys.stderr = self.old_stderr
+        pass
 
 
 class OptimisticProcessor:
@@ -75,49 +62,16 @@ class OptimisticProcessor:
     
     def _create_consumer(self, consumer_config: Dict[str, Any]) -> Consumer:
         """Create a consumer with suppressed librdkafka logging."""
-        
-        # Set environment variable to suppress telemetry messages
-        import os
-        import sys
-        import contextlib
-        from io import StringIO
-        
-        os.environ['KAFKA_LOG_LEVEL'] = '7'  # Only critical messages
-        os.environ['RDKAFKA_LOG_LEVEL'] = '7'  # Only critical messages
-        
+
         # Set log level to suppress most messages
-        consumer_config['log_level'] = '7'  # Only critical messages
-        
-        # Add more aggressive telemetry suppression
-        consumer_config.update({
-            'log.connection.close': 'false',
-            'log.thread.name': 'false', 
-            'log.queue': 'false',
-            'statistics.interval.ms': '0',
-            'enable.auto.commit': 'false',
-            'enable.partition.eof': 'false',
-            'log.connection.close': 'false',
-            'log.thread.name': 'false',
-            'log.queue': 'false',
-            'statistics.interval.ms': '0'
-        })
-        
-        # Suppress telemetry during consumer creation using file redirection
-        import tempfile
-        
-        # Create a temporary file to capture stderr
-        with tempfile.NamedTemporaryFile(mode='w', delete=True) as stderr_file:
-            # Redirect stderr to the temporary file
-            old_stderr = sys.stderr
-            sys.stderr = stderr_file
-            
-            try:
-                consumer = Consumer(consumer_config)
-            finally:
-                # Restore stderr
-                sys.stderr = old_stderr
-        
-        return consumer
+        consumer_config.setdefault('log_level', '7')
+        consumer_config.setdefault('log.connection.close', 'false')
+        consumer_config.setdefault('log.thread.name', 'false')
+        consumer_config.setdefault('log.queue', 'false')
+        consumer_config.setdefault('statistics.interval.ms', '0')
+        consumer_config.setdefault('enable.partition.eof', 'false')
+
+        return Consumer(consumer_config)
     
     def _get_shared_consumer(self) -> Consumer:
         """Get or create a shared consumer for connection reuse."""
@@ -126,9 +80,8 @@ class OptimisticProcessor:
                 # Create consumer config
                 consumer_config = {
                     'bootstrap.servers': self.config.kafka.bootstrap_servers,
-                    'group.id': f'schema-infer-shared-{int(time.time())}',
+                    'group.id': f'schema-infer-shared-{uuid.uuid4().hex[:12]}',
                     'auto.offset.reset': self.config.kafka.auto_offset_reset,
-                    'enable.auto.commit': False,
                     'session.timeout.ms': 15000,
                     'heartbeat.interval.ms': 5000,
                     'log_level': '7',
@@ -149,7 +102,6 @@ class OptimisticProcessor:
                     'api.version.request.timeout.ms': 5000,
                     'queued.min.messages': 5000,
                     'queued.max.messages.kbytes': 131072,
-                    'enable.partition.eof': 'false',
                     'check.crcs': 'false',
                 }
                 
@@ -233,102 +185,64 @@ class OptimisticProcessor:
     
     def _update_performance_stats(self, processing_time: float):
         """Update performance statistics."""
-        self.performance_stats['total_processed'] += 1
-        self.performance_stats['total_time'] += processing_time
-        self.performance_stats['avg_time_per_topic'] = (
-            self.performance_stats['total_time'] / self.performance_stats['total_processed']
-        )
-        self.performance_stats['fastest_processing'] = min(
-            self.performance_stats['fastest_processing'], processing_time
-        )
-        self.performance_stats['slowest_processing'] = max(
-            self.performance_stats['slowest_processing'], processing_time
-        )
+        with self._consumer_lock:
+            self.performance_stats['total_processed'] += 1
+            self.performance_stats['total_time'] += processing_time
+            self.performance_stats['avg_time_per_topic'] = (
+                self.performance_stats['total_time'] / self.performance_stats['total_processed']
+            )
+            self.performance_stats['fastest_processing'] = min(
+                self.performance_stats['fastest_processing'], processing_time
+            )
+            self.performance_stats['slowest_processing'] = max(
+                self.performance_stats['slowest_processing'], processing_time
+            )
     
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get current performance statistics."""
         return self.performance_stats.copy()
     
     def _read_messages_from_partitions_parallel(self, consumer, topic_name: str, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
-        """Read messages from multiple partitions in parallel."""
-        
-        def read_from_partition(partition):
-            """Read messages from a single partition."""
-            try:
-                partition_messages = []
-                start_time = time.time()
-                
-                # Seek to end of partition and read backwards
-                low, high = consumer.get_watermark_offsets(partition, timeout=10.0)
-                if high > low:
-                    # Start from the last few messages
-                    start_offset = max(low, high - max_messages)
-                    consumer.seek(confluent_kafka.TopicPartition(topic_name, partition.partition, start_offset))
-                    
-                    # Poll for messages
-                    while len(partition_messages) < max_messages and (time.time() - start_time) < timeout:
-                        msg = consumer.poll(timeout=0.1)
-                        if msg is None:
-                            continue
-                        if msg.error():
-                            if msg.error().code() == ConfluentKafkaError._PARTITION_EOF:
-                                break
-                            else:
-                                continue
-                        else:
-                            if msg.value() is not None:
-                                partition_messages.append((msg.key(), msg.value()))
-                                
-                return partition_messages
-            except Exception as e:
-                self.logger.debug(f"Failed to read from partition {partition}: {e}")
-                return []
-        
+        """Read messages from multiple partitions sequentially (consumer is not thread-safe)."""
+
         try:
-            # Get all partitions
             assignment = consumer.assignment()
             if not assignment:
                 return []
-            
-            # Limit number of partitions to avoid too many threads
-            max_partitions = min(self.config.performance.max_workers, len(assignment))
-            partitions_to_read = list(assignment)[:max_partitions]
-            
-            # Read from partitions in parallel
-            with ThreadPoolExecutor(max_workers=max_partitions) as executor:
-                future_to_partition = {
-                    executor.submit(read_from_partition, partition): partition 
-                    for partition in partitions_to_read
-                }
-                
-                all_messages = []
-                for future in as_completed(future_to_partition, timeout=timeout):
-                    try:
-                        partition_messages = future.result()
-                        all_messages.extend(partition_messages)
-                        if len(all_messages) >= max_messages:
-                            break
-                    except Exception as e:
-                        self.logger.debug(f"Partition reading failed: {e}")
-                        continue
-                
-                return all_messages[:max_messages]
-                
+
+            all_messages = []
+            for partition in assignment:
+                try:
+                    low, high = consumer.get_watermark_offsets(partition, timeout=10.0)
+                    if high > low:
+                        start_offset = max(low, high - max_messages)
+                        consumer.seek(confluent_kafka.TopicPartition(topic_name, partition.partition, start_offset))
+
+                        while len(all_messages) < max_messages:
+                            msg = consumer.poll(timeout=0.1)
+                            if msg is None:
+                                break
+                            if msg.error():
+                                if msg.error().code() == ConfluentKafkaError._PARTITION_EOF:
+                                    break
+                                continue
+                            if msg.value() is not None:
+                                all_messages.append((msg.key(), msg.value()))
+                except Exception as e:
+                    self.logger.debug(f"Failed to read from partition {partition}: {e}")
+
+                if len(all_messages) >= max_messages:
+                    break
+
+            return all_messages[:max_messages]
+
         except Exception as e:
-            self.logger.debug(f"Parallel partition reading failed: {e}")
+            self.logger.debug(f"Partition reading failed: {e}")
             return []
     
     def _quick_topic_check(self, topic_name: str) -> Tuple[bool, str]:
         """Quick check if topic has any messages without reading them."""
-        
-        # Suppress all stderr output during the entire quick check
-        with open(os.devnull, 'w') as devnull:
-            old_stderr = sys.stderr
-            sys.stderr = devnull
-            try:
-                return self._do_quick_topic_check(topic_name)
-            finally:
-                sys.stderr = old_stderr
+        return self._do_quick_topic_check(topic_name)
     
     def _do_quick_topic_check(self, topic_name: str) -> Tuple[bool, str]:
         """Internal method for quick topic check - simplified version."""
@@ -336,7 +250,7 @@ class OptimisticProcessor:
         try:
             consumer_config = {
                 'bootstrap.servers': self.config.kafka.bootstrap_servers,
-                'group.id': f'schema-infer-check-{int(time.time())}',
+                'group.id': f'schema-infer-check-{uuid.uuid4().hex[:12]}',
                 'auto.offset.reset': 'latest',
                 'enable.auto.commit': False,
                 'session.timeout.ms': 3000,  # Shorter timeout
@@ -393,7 +307,7 @@ class OptimisticProcessor:
         try:
             consumer_config = {
                 'bootstrap.servers': self.config.kafka.bootstrap_servers,
-                'group.id': f'schema-infer-offset-check-{int(time.time())}',
+                'group.id': f'schema-infer-offset-check-{uuid.uuid4().hex[:12]}',
                 'auto.offset.reset': 'earliest',
                 'enable.auto.commit': False,
                 'session.timeout.ms': 3000,  # Shorter timeout
@@ -447,37 +361,15 @@ class OptimisticProcessor:
                     partitions_to_check = [assignment[i] for i in range(0, total_partitions, step)][:max_partitions_to_check]
                     self.logger.info(f"Topic has {total_partitions} partitions, sampling {len(partitions_to_check)} partitions")
                 
-                # Check offsets with multithreading for better performance
-                def check_partition_offset(partition):
-                    """Check offset for a single partition."""
+                for partition in partitions_to_check:
                     try:
-                        # Get beginning and end offsets with short timeout
                         low, high = consumer.get_watermark_offsets(partition, timeout=10.0)
                         partition_messages = high - low
-                        return partition_messages, partition_messages == 0
+                        total_messages += partition_messages
+                        if partition_messages == 0:
+                            empty_partitions += 1
                     except Exception as e:
                         self.logger.debug(f"Failed to get offsets for partition {partition}: {e}")
-                        return 0, False
-                
-                # Use ThreadPoolExecutor for parallel offset checking
-                max_workers = min(self.config.performance.max_workers, len(partitions_to_check))  # Use config setting
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    # Submit all partition checks
-                    future_to_partition = {
-                        executor.submit(check_partition_offset, partition): partition 
-                        for partition in partitions_to_check
-                    }
-                    
-                    # Collect results
-                    for future in as_completed(future_to_partition, timeout=5.0):
-                        try:
-                            partition_messages, is_empty = future.result()
-                            total_messages += partition_messages
-                            if is_empty:
-                                empty_partitions += 1
-                        except Exception as e:
-                            self.logger.debug(f"Partition check failed: {e}")
-                            continue
                 
                 # Scale up results if we sampled
                 if total_partitions > max_partitions_to_check:
@@ -532,30 +424,15 @@ class OptimisticProcessor:
             self.logger.info(f"Reading latest {max_messages} messages from topic: {topic_name}")
         start_time = time.time()
         
-        # First, check if topic is truly empty by comparing beginning and end offsets
-        # Use a timeout to prevent hanging
-        import signal
-        
-        def timeout_handler(signum, frame):
-            raise TimeoutError("Offset check timed out")
-        
+        # First, check if topic is truly empty
         try:
-            # Set a 5-second timeout for the offset check
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(3)
-            
             is_empty, reason = self._check_topic_offsets(topic_name)
-            
-            # Cancel the alarm
-            signal.alarm(0)
-            
+
             if is_empty:
                 print(f"⚠️  {reason}")
                 return []
-        except (TimeoutError, Exception) as e:
-            # Cancel the alarm
-            signal.alarm(0)
-            self.logger.debug(f"Offset check failed or timed out: {e}")
+        except Exception as e:
+            self.logger.debug(f"Offset check failed: {e}")
             print(f"⚠️  Unable to determine topic state - proceeding with message reading")
         
         # Use single optimized strategy to reduce connection load
@@ -696,15 +573,11 @@ class OptimisticProcessor:
         
         consumer_config = {
                 'bootstrap.servers': self.config.kafka.bootstrap_servers,
-                'group.id': f'schema-infer-opt-{int(time.time())}',
+                'group.id': f'schema-infer-opt-{uuid.uuid4().hex[:12]}',
                 'auto.offset.reset': self.config.kafka.auto_offset_reset,
-                'enable.auto.commit': False,  # Disable auto-commit for better control
                 'session.timeout.ms': 15000,  # Balanced for reliability
                 'heartbeat.interval.ms': 5000,  # Balanced for reliability
                 'log_level': '7',
-                'log.connection.close': 'false',
-                'log.thread.name': 'false',
-                'log.queue': 'false',
                 'statistics.interval.ms': '0',  # Disable statistics to reduce telemetry
                 'enable.auto.commit': 'false',  # Disable auto-commit telemetry
                 'enable.partition.eof': 'false',  # Disable EOF telemetry
@@ -725,7 +598,6 @@ class OptimisticProcessor:
                 # Maximum speed optimizations
                 'queued.min.messages': 5000,  # Increased for speed
                 'queued.max.messages.kbytes': 131072,  # 128MB message buffer (doubled)
-                'enable.partition.eof': 'false',  # Don't wait for EOF
                 'check.crcs': 'false',  # Skip CRC checks for speed
             }
         
@@ -799,53 +671,23 @@ class OptimisticProcessor:
                 leave=False
             )
             
-            # Read from partitions with smart parallel processing
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            
-            # Use limited parallelism to avoid overwhelming the cluster
-            max_parallel = min(3, len(partitions))  # Max 3 parallel reads
-            
-            with ThreadPoolExecutor(max_workers=max_parallel) as executor:
-                # Submit partition reading tasks
-                partition_futures = {}
-                for partition in partitions:
-                    future = executor.submit(self._read_partition_optimized, consumer, partition, messages_per_partition, timeout, topic_name)
-                    partition_futures[future] = partition
-                
-                # Collect results as they complete
-                for future in as_completed(partition_futures):
-                    partition = partition_futures[future]
-                    try:
-                        partition_messages = future.result()
-                        if partition_messages:
-                            all_messages.extend(partition_messages)
-                            if self.config.performance.verbose_logging:
-                                self.logger.info(f"Read {len(partition_messages)} messages from partition {partition.partition}, total: {len(all_messages)}")
-                            
-                            # Update progress bar
-                            if self.config.performance.verbose_logging:
-                                progress_bar.set_postfix({
-                                    'messages': len(all_messages),
-                                    'target': max_messages
-                                })
-                            
-                            # If we have enough messages, cancel remaining futures and return early
-                            if len(all_messages) >= max_messages:
-                                if self.config.performance.verbose_logging:
-                                    self.logger.info(f"Collected {len(all_messages)} messages from all partitions, returning early")
-                                # Cancel remaining futures
-                                for f in partition_futures:
-                                    if not f.done():
-                                        f.cancel()
-                                progress_bar.close()
-                                return all_messages[:max_messages]
-                                
-                    except Exception as e:
-                        self.logger.debug(f"Error reading from partition {partition}: {e}")
-                        continue
-                    
-                    # Update progress bar for each partition processed
-                    progress_bar.update(1)
+            # Read from partitions sequentially (consumer is not thread-safe)
+            for partition in partitions:
+                try:
+                    partition_messages = self._read_partition_optimized(consumer, partition, messages_per_partition, timeout, topic_name)
+                    if partition_messages:
+                        all_messages.extend(partition_messages)
+                        if self.config.performance.verbose_logging:
+                            self.logger.info(f"Read {len(partition_messages)} messages from partition {partition.partition}, total: {len(all_messages)}")
+
+                        if len(all_messages) >= max_messages:
+                            progress_bar.close()
+                            return all_messages[:max_messages]
+                except Exception as e:
+                    self.logger.debug(f"Error reading from partition {partition}: {e}")
+                    continue
+
+                progress_bar.update(1)
             
             # Fallback to sequential reading if parallel reading fails
             if not all_messages:
@@ -982,28 +824,6 @@ class OptimisticProcessor:
             pass
         return messages
     
-    def _read_partition_messages(self, consumer, partition, messages_per_partition: int, timeout: int, topic_name: str) -> List[Tuple[Optional[bytes], bytes]]:
-        """Read messages from a single partition efficiently."""
-        try:
-            # Get watermark offsets
-            low, high = consumer.get_watermark_offsets(partition, timeout=5.0)
-            if self.config.performance.verbose_logging:
-                self.logger.info(f"Partition {partition.partition} offsets: low={low}, high={high}")
-            
-            if high > low:
-                # Calculate smart offset - read from end but not too far back
-                target_offset = max(low, high - min(messages_per_partition * 2, 5000))
-                if self.config.performance.verbose_logging:
-                    self.logger.info(f"Seeking to offset {target_offset} on partition {partition.partition}")
-                consumer.seek(confluent_kafka.TopicPartition(topic_name, partition.partition, target_offset))
-                
-                # Batch poll for messages from this partition
-                return self._batch_poll_messages(consumer, messages_per_partition, timeout, topic_name)
-        except Exception as e:
-            self.logger.debug(f"Error reading from partition {partition}: {e}")
-        
-        return []
-    
     def _read_partition_optimized(self, consumer, partition, messages_per_partition: int, timeout: int, topic_name: str) -> List[Tuple[Optional[bytes], bytes]]:
         """Read messages from a single partition with optimized settings."""
         try:
@@ -1031,7 +851,7 @@ class OptimisticProcessor:
         
         consumer_config = {
             'bootstrap.servers': self.config.kafka.bootstrap_servers,
-            'group.id': f'schema-infer-fallback-{int(time.time())}',
+            'group.id': f'schema-infer-fallback-{uuid.uuid4().hex[:12]}',
             'auto.offset.reset': 'earliest',
             'enable.auto.commit': False,  # Disable auto-commit for better control
             'session.timeout.ms': 20000,  # Stable session timeout
@@ -1145,303 +965,3 @@ class OptimisticProcessor:
         finally:
             consumer.close()
     
-    def _strategy_latest_offset(self, topic_name: str, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
-        """Strategy 1: Read from latest offset (newest messages)."""
-        
-        consumer_config = {
-            'bootstrap.servers': self.config.kafka.bootstrap_servers,
-            'group.id': f'schema-infer-{int(time.time())}',  # Unique group ID
-            'auto.offset.reset': 'latest',
-            'enable.auto.commit': False,
-            'session.timeout.ms': 6000,  # Minimum allowed by broker
-            'heartbeat.interval.ms': 2000,  # Must be less than session timeout
-        }
-        
-        # Add authentication
-        from .auth import AuthenticationManager
-        auth_manager = AuthenticationManager(self.config)
-        consumer_config.update(auth_manager.configure_kafka_auth())
-        
-        consumer = self._create_consumer(consumer_config)
-        messages = []
-        
-        try:
-            consumer.subscribe([topic_name])
-            
-            # Wait for assignment
-            start_time = time.time()
-            while time.time() - start_time < 2:  # 2 second timeout for assignment
-                msg = consumer.poll(timeout=0.5)
-                if msg is None:
-                    continue
-                if msg.error():
-                    if msg.error().code() == ConfluentKafkaError._PARTITION_EOF:
-                        break
-                    else:
-                        raise KafkaError(f"Consumer error: {msg.error()}")
-                else:
-                    # We got a message, add it and continue
-                    if msg.value() is not None:
-                        messages.append((msg.key(), msg.value()))
-                        if len(messages) >= max_messages:
-                            break
-            
-            # If we have messages, return them
-            if messages:
-                return messages
-            
-            # Try parallel partition reading for better performance
-            parallel_messages = self._read_messages_from_partitions_parallel(consumer, topic_name, max_messages, timeout)
-            if parallel_messages:
-                return parallel_messages
-            
-            # If no messages from latest, try to read from end and work backwards
-            return self._read_from_end_backwards(consumer, topic_name, max_messages, timeout)
-            
-        finally:
-            consumer.close()
-    
-    def _strategy_end_offset(self, topic_name: str, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
-        """Strategy 2: Read from end offset (most recent messages)."""
-        
-        consumer_config = {
-            'bootstrap.servers': self.config.kafka.bootstrap_servers,
-            'group.id': f'schema-infer-end-{int(time.time())}',
-            'auto.offset.reset': 'latest',
-            'enable.auto.commit': False,
-            'session.timeout.ms': 6000,  # Minimum allowed by broker
-            'heartbeat.interval.ms': 2000,  # Must be less than session timeout
-        }
-        
-        # Add authentication
-        from .auth import AuthenticationManager
-        auth_manager = AuthenticationManager(self.config)
-        consumer_config.update(auth_manager.configure_kafka_auth())
-        
-        consumer = self._create_consumer(consumer_config)
-        messages = []
-        
-        try:
-            consumer.subscribe([topic_name])
-            
-            # Get partition metadata to find end offsets
-            metadata = consumer.list_topics(topic_name, timeout=10)
-            if topic_name not in metadata.topics:
-                raise KafkaError(f"Topic {topic_name} not found")
-            
-            topic_metadata = metadata.topics[topic_name]
-            partitions = list(topic_metadata.partitions.keys())
-            
-            if not partitions:
-                raise KafkaError(f"No partitions found for topic {topic_name}")
-            
-            # Read from each partition's end
-            for partition in partitions:
-                try:
-                    # Get high water mark (end offset)
-                    partition_metadata = consumer.get_watermark_offsets(
-                        confluent_kafka.TopicPartition(topic_name, partition)
-                    )
-                    high_water_mark = partition_metadata[1]
-                    
-                    if high_water_mark > 0:
-                        # Read from the last few messages
-                        start_offset = max(0, high_water_mark - max_messages)
-                        
-                        # Assign to specific partition and offset
-                        consumer.assign([
-                            confluent_kafka.TopicPartition(topic_name, partition, start_offset)
-                        ])
-                        
-                        # Read messages
-                        partition_messages = self._read_assigned_messages(consumer, max_messages, timeout)
-                        messages.extend(partition_messages)
-                        
-                        if len(messages) >= max_messages:
-                            break
-                            
-                except Exception as e:
-                    self.logger.warning(f"Failed to read from partition {partition}: {e}")
-                    continue
-            
-            return messages[:max_messages]
-            
-        finally:
-            consumer.close()
-    
-    def _strategy_earliest_offset(self, topic_name: str, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
-        """Strategy 3: Read from earliest offset (oldest messages)."""
-        
-        consumer_config = {
-            'bootstrap.servers': self.config.kafka.bootstrap_servers,
-            'group.id': f'schema-infer-earliest-{int(time.time())}',
-            'auto.offset.reset': 'earliest',
-            'enable.auto.commit': False,
-            'session.timeout.ms': 6000,  # Minimum allowed by broker
-            'heartbeat.interval.ms': 2000,  # Must be less than session timeout
-        }
-        
-        # Add authentication
-        from .auth import AuthenticationManager
-        auth_manager = AuthenticationManager(self.config)
-        consumer_config.update(auth_manager.configure_kafka_auth())
-        
-        consumer = self._create_consumer(consumer_config)
-        messages = []
-        
-        try:
-            consumer.subscribe([topic_name])
-            
-            start_time = time.time()
-            while len(messages) < max_messages and time.time() - start_time < timeout:
-                msg = consumer.poll(timeout=0.5)
-                
-                if msg is None:
-                    continue
-                
-                if msg.error():
-                    if msg.error().code() == ConfluentKafkaError._PARTITION_EOF:
-                        break
-                    else:
-                        raise KafkaError(f"Consumer error: {msg.error()}")
-                
-                if msg.value() is not None:
-                    messages.append((msg.key(), msg.value()))
-            
-            return messages
-            
-        finally:
-            consumer.close()
-    
-    def _strategy_any_available(self, topic_name: str, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
-        """Strategy 4: Read any available messages from any offset."""
-        
-        consumer_config = {
-            'bootstrap.servers': self.config.kafka.bootstrap_servers,
-            'group.id': f'schema-infer-any-{int(time.time())}',
-            'auto.offset.reset': 'earliest',
-            'enable.auto.commit': False,
-            'session.timeout.ms': 6000,  # Minimum allowed by broker
-            'heartbeat.interval.ms': 2000,  # Must be less than session timeout
-        }
-        
-        # Add authentication
-        from .auth import AuthenticationManager
-        auth_manager = AuthenticationManager(self.config)
-        consumer_config.update(auth_manager.configure_kafka_auth())
-        
-        consumer = self._create_consumer(consumer_config)
-        messages = []
-        
-        try:
-            # Try to get any available messages
-            metadata = consumer.list_topics(topic_name, timeout=10)
-            if topic_name not in metadata.topics:
-                raise KafkaError(f"Topic {topic_name} not found")
-            
-            topic_metadata = metadata.topics[topic_name]
-            partitions = list(topic_metadata.partitions.keys())
-            
-            # Try each partition
-            for partition in partitions:
-                try:
-                    # Get watermark offsets
-                    partition_metadata = consumer.get_watermark_offsets(
-                        confluent_kafka.TopicPartition(topic_name, partition)
-                    )
-                    low_water_mark, high_water_mark = partition_metadata
-                    
-                    if high_water_mark > low_water_mark:
-                        # There are messages in this partition
-                        # Try to read from the middle
-                        mid_offset = (low_water_mark + high_water_mark) // 2
-                        
-                        consumer.assign([
-                            confluent_kafka.TopicPartition(topic_name, partition, mid_offset)
-                        ])
-                        
-                        partition_messages = self._read_assigned_messages(consumer, max_messages, timeout)
-                        messages.extend(partition_messages)
-                        
-                        if len(messages) >= max_messages:
-                            break
-                            
-                except Exception as e:
-                    self.logger.warning(f"Failed to read from partition {partition}: {e}")
-                    continue
-            
-            return messages[:max_messages]
-            
-        finally:
-            consumer.close()
-    
-    def _read_from_end_backwards(self, consumer: Consumer, topic_name: str, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
-        """Read messages from the end working backwards."""
-        
-        messages = []
-        start_time = time.time()
-        
-        try:
-            # Get partition metadata
-            metadata = consumer.list_topics(topic_name, timeout=10)
-            if topic_name not in metadata.topics:
-                return messages
-            
-            topic_metadata = metadata.topics[topic_name]
-            partitions = list(topic_metadata.partitions.keys())
-            
-            # Try to read from the most recent partition
-            for partition in reversed(partitions):
-                try:
-                    # Get high water mark
-                    partition_metadata = consumer.get_watermark_offsets(
-                        confluent_kafka.TopicPartition(topic_name, partition)
-                    )
-                    high_water_mark = partition_metadata[1]
-                    
-                    if high_water_mark > 0:
-                        # Start from a few messages back
-                        start_offset = max(0, high_water_mark - max_messages)
-                        
-                        consumer.assign([
-                            confluent_kafka.TopicPartition(topic_name, partition, start_offset)
-                        ])
-                        
-                        partition_messages = self._read_assigned_messages(consumer, max_messages, timeout)
-                        messages.extend(partition_messages)
-                        
-                        if len(messages) >= max_messages:
-                            break
-                            
-                except Exception as e:
-                    self.logger.warning(f"Failed to read backwards from partition {partition}: {e}")
-                    continue
-            
-            return messages[:max_messages]
-            
-        except Exception as e:
-            self.logger.warning(f"Failed to read backwards: {e}")
-            return messages
-    
-    def _read_assigned_messages(self, consumer: Consumer, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
-        """Read messages from assigned partitions."""
-        
-        messages = []
-        start_time = time.time()
-        
-        while len(messages) < max_messages and time.time() - start_time < timeout:
-            msg = consumer.poll(timeout=1.0)
-            
-            if msg is None:
-                continue
-            
-            if msg.error():
-                if msg.error().code() == ConfluentKafkaError._PARTITION_EOF:
-                    break
-                else:
-                    raise KafkaError(f"Consumer error: {msg.error()}")
-            
-            if msg.value() is not None:
-                messages.append((msg.key(), msg.value()))
-        
-        return messages

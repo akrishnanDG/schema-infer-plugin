@@ -1,10 +1,11 @@
-# Testing dependencies for Schema Inference Schema Inference Plugin
+# Testing dependencies for Schema Inference Plugin
 
 # Core testing framework
 pytest>=7.0.0
 pytest-cov>=4.0.0
 pytest-xdist>=3.0.0
 pytest-mock>=3.10.0
+pytest-asyncio>=0.21.0
 
 # Additional testing utilities
 pytest-html>=3.1.0

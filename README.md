@@ -1,7 +1,7 @@
 # Schema Inference Plugin
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/example/schema-infer-plugin)
-[![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://python.org)
+[![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-comprehensive-green.svg)](tests/)
 
@@ -63,7 +63,6 @@ kafka:
 
 schema_registry:
   url: "http://localhost:8081"
-  verify_ssl: false
 
 inference:
   max_messages: 50
@@ -156,7 +155,6 @@ kafka:
 
 schema_registry:
   url: "https://schemaregistry:8081"
-  verify_ssl: false
 ```
 
 ## 💼 Use Cases
@@ -206,7 +204,7 @@ schema-infer infer --topic-pattern ".*-api" --format json-schema --output-dir ap
 ### Topic Filtering
 ```yaml
 topic_filter:
-  internal_prefix: "_"
+  internal_prefix: "__"
   exclude_internal: true
   additional_exclude_prefixes: ["__", "temp-", "backup-"]
   include_patterns: [".*-events", "prod-.*"]
@@ -227,7 +225,7 @@ performance:
 ### Schema Registry Compatibility
 ```yaml
 schema_registry:
-  compatibility: "NONE"  # NONE, BACKWARD, FORWARD, FULL
+  compatibility: "BACKWARD"  # NONE, BACKWARD, FORWARD, FULL
   subject_name_strategy: "TopicNameStrategy"  # TopicName, RecordName, TopicRecordName
 ```
 
