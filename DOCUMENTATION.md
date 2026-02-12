@@ -214,7 +214,8 @@ schema_registry:
   auth: null
   compatibility: "BACKWARD"
   subject_name_strategy: "TopicNameStrategy"
-  
+  context: null  # Optional: prefix subjects with :.context-name:
+
   # Schema Inference Cloud Authentication
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"

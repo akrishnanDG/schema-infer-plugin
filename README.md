@@ -121,6 +121,9 @@ schema-infer infer --topic-pattern ".*-events" --format json-schema
 # Register schema automatically
 schema-infer infer --topic user-events --format avro --register
 
+# Register all topics under a Schema Registry context
+schema-infer infer --topic-pattern ".*" --format avro --register --context my-context --exclude-internal
+
 # Configure compatibility levels
 # In config.yaml:
 schema_registry:
@@ -238,11 +241,12 @@ performance:
   verbose_logging: false
 ```
 
-### Schema Registry Compatibility
+### Schema Registry Configuration
 ```yaml
 schema_registry:
   compatibility: "BACKWARD"  # NONE, BACKWARD, FORWARD, FULL
   subject_name_strategy: "TopicNameStrategy"  # TopicName, RecordName, TopicRecordName
+  context: "my-context"  # Optional: prefix subjects with :.my-context:
 ```
 
 ## 🧪 Testing
