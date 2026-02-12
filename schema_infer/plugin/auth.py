@@ -148,19 +148,21 @@ class AuthenticationManager:
     
     def _configure_cloud_sr_auth(self) -> Dict[str, Any]:
         """Configure authentication for Schema Inference Cloud Schema Registry."""
-        
+
         config = {}
-        
-        # Get credentials from environment or config
-        api_key = self._get_cloud_api_key()
-        api_secret = self._get_cloud_api_secret()
-        
+
+        # Use SR-specific credentials first, fall back to Kafka credentials
+        api_key = (self.config.schema_registry.cloud_api_key
+                   or self.config.kafka.cloud_api_key)
+        api_secret = (self.config.schema_registry.cloud_api_secret
+                      or self.config.kafka.cloud_api_secret)
+
         if api_key and api_secret:
             config['username'] = api_key
             config['password'] = api_secret
         else:
-            self.logger.warning("Schema Inference Cloud API key/secret not found for Schema Registry")
-        
+            self.logger.warning("Cloud API key/secret not found for Schema Registry")
+
         return config
     
     def _configure_platform_sr_auth(self) -> Dict[str, Any]:

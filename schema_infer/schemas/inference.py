@@ -149,12 +149,18 @@ class SchemaInferrer:
         self.null_handling = null_handling
         self.logger = get_logger(__name__)
 
-    # ISO 8601 datetime patterns
+    # Datetime patterns (ISO 8601 and common formats)
     _DATETIME_PATTERNS = [
-        re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),  # 2025-12-01T10:00:00
-        re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'),   # 2025-12-01 10:00:00
+        re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),   # 2025-12-01T10:00:00
+        re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'),    # 2025-12-01 10:00:00
+        re.compile(r'^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}'),    # 12/01/2025 10:00:00
+        re.compile(r'^\d{2}-\d{2}-\d{4} \d{2}:\d{2}:\d{2}'),    # 01-12-2025 10:00:00
     ]
-    _DATE_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}$')          # 2025-12-01
+    _DATE_PATTERNS = [
+        re.compile(r'^\d{4}-\d{2}-\d{2}$'),                      # 2025-12-01
+        re.compile(r'^\d{2}/\d{2}/\d{4}$'),                      # 12/01/2025
+        re.compile(r'^\d{2}-\d{2}-\d{4}$'),                      # 01-12-2025
+    ]
 
     def infer_schema(self, parsed_data: List[Dict[str, Any]], schema_name: str) -> InferredSchema:
         """
@@ -294,8 +300,9 @@ class SchemaInferrer:
             for pattern in self._DATETIME_PATTERNS:
                 if pattern.match(value):
                     return FieldType("datetime")
-            if self._DATE_PATTERN.match(value):
-                return FieldType("date")
+            for pattern in self._DATE_PATTERNS:
+                if pattern.match(value):
+                    return FieldType("date")
             return FieldType("string")
         elif isinstance(value, list):
             if not value:

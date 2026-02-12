@@ -315,7 +315,7 @@ class TestSchemaGenerators:
         # Test nested record structure - profile has nested fields so it becomes a record
         assert "profile" in field_dict
         assert field_dict["profile"]["type"]["type"] == "record"
-        assert field_dict["profile"]["type"]["name"] == "profile_record"
+        assert field_dict["profile"]["type"]["name"] == "comprehensive_test_profile_record"
         assert "fields" in field_dict["profile"]["type"]
 
         profile_fields = field_dict["profile"]["type"]["fields"]
@@ -337,7 +337,7 @@ class TestSchemaGenerators:
         assert "address" in profile_field_dict
         address_field = profile_field_dict["address"]
         assert address_field["type"]["type"] == "record"
-        assert address_field["type"]["name"] == "address_record"
+        assert address_field["type"]["name"] == "comprehensive_test_address_record"
 
         # Array fields now properly typed
         assert profile_field_dict["profile_tags"]["type"] == {"type": "array", "items": "string"}

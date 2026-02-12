@@ -304,6 +304,8 @@ def infer(
     config.auto_detect_format = (data_format == "auto")
     config.forced_data_format = data_format if data_format != "auto" else None
     
+    error_details = []  # Track detailed error information
+
     # Initialize components with shared consumer for connection reuse
     with OptimisticProcessor(config) as processor:
         inferrer = SchemaInferrer(config)

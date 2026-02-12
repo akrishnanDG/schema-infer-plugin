@@ -59,6 +59,8 @@ class AvroGenerator(BaseSchemaGenerator):
         }
         
         # Build nested record structure from flat field names
+        # Pass schema name as prefix to avoid Avro name collisions across topics
+        self._record_prefix = sanitized_name
         nested_fields = self._build_nested_avro_fields(schema.fields)
         avro_schema["fields"] = nested_fields
         
@@ -104,7 +106,7 @@ class AvroGenerator(BaseSchemaGenerator):
                         "type": "array",
                         "items": {
                             "type": "record",
-                            "name": self._sanitize_avro_name(f"{field_name}_item"),
+                            "name": self._sanitize_avro_name(f"{self._record_prefix}_{field_name}_item"),
                             "fields": item_fields
                         }
                     },
@@ -121,7 +123,7 @@ class AvroGenerator(BaseSchemaGenerator):
                     "name": self._sanitize_avro_name(top_level),
                     "type": {
                         "type": "record",
-                        "name": self._sanitize_avro_name(f"{top_level}_record"),
+                        "name": self._sanitize_avro_name(f"{self._record_prefix}_{top_level}_record"),
                         "fields": self._build_nested_avro_record_fields(nested_list)
                     },
                     "doc": f"Nested record for {top_level}"
@@ -132,7 +134,7 @@ class AvroGenerator(BaseSchemaGenerator):
                     if f["name"] == self._sanitize_avro_name(top_level):
                         f["type"] = {
                             "type": "record",
-                            "name": self._sanitize_avro_name(f"{top_level}_record"),
+                            "name": self._sanitize_avro_name(f"{self._record_prefix}_{top_level}_record"),
                             "fields": self._build_nested_avro_record_fields(nested_list)
                         }
                         break
@@ -147,7 +149,7 @@ class AvroGenerator(BaseSchemaGenerator):
                         "type": "array",
                         "items": {
                             "type": "record",
-                            "name": self._sanitize_avro_name(f"{array_parent}_item"),
+                            "name": self._sanitize_avro_name(f"{self._record_prefix}_{array_parent}_item"),
                             "fields": item_fields
                         }
                     },
@@ -186,7 +188,7 @@ class AvroGenerator(BaseSchemaGenerator):
                     "name": self._sanitize_avro_name(field_name),
                     "type": {
                         "type": "record",
-                        "name": self._sanitize_avro_name(f"{field_name}_record"),
+                        "name": self._sanitize_avro_name(f"{self._record_prefix}_{field_name}_record"),
                         "fields": self._build_nested_avro_record_fields(nested_entries)
                     },
                     "doc": f"Nested record for {field_name}"
@@ -197,23 +199,48 @@ class AvroGenerator(BaseSchemaGenerator):
     
     def _convert_field_to_avro(self, field: SchemaField) -> Dict[str, Any]:
         """Convert a schema field to Avro format."""
-        
+
+        avro_type = self._convert_type_to_avro(field.field_type)
+
         avro_field = {
             "name": self._sanitize_avro_name(field.name),
-            "type": self._convert_type_to_avro(field.field_type),
+            "type": avro_type,
             "doc": field.description or f"Field {field.name}"
         }
-        
+
         if field.default_value is not None:
             avro_field["default"] = field.default_value
         elif not field.required:
             # Make field optional by wrapping in union with null
-            current_type = avro_field["type"]
-            if isinstance(current_type, str) and current_type != "null":
-                avro_field["type"] = ["null", current_type]
+            if isinstance(avro_type, str) and avro_type != "null":
+                avro_field["type"] = ["null", avro_type]
                 avro_field["default"] = None
-        
+            elif isinstance(avro_type, dict):
+                avro_field["type"] = ["null", avro_type]
+                avro_field["default"] = None
+        else:
+            # Add type-appropriate defaults for schema evolution compatibility
+            avro_field["default"] = self._get_avro_default(avro_type)
+
         return avro_field
+
+    def _get_avro_default(self, avro_type: Any) -> Any:
+        """Get a sensible default value for an Avro type."""
+        if isinstance(avro_type, dict):
+            inner_type = avro_type.get("type")
+            if inner_type == "array":
+                return []
+            return {}
+        defaults = {
+            "string": "",
+            "int": 0,
+            "long": 0,
+            "float": 0.0,
+            "double": 0.0,
+            "boolean": False,
+            "null": None,
+        }
+        return defaults.get(avro_type, "")
     
     def _convert_type_to_avro(self, field_type: FieldType) -> Any:
         """Convert FieldType to Avro type."""
@@ -610,11 +637,18 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
         # Add default value
         if field.default_value is not None:
             property_schema["default"] = field.default_value
-        
+        else:
+            # Add type-appropriate default
+            json_type = property_schema.get("type")
+            if isinstance(json_type, str):
+                defaults = {"string": "", "integer": 0, "number": 0.0, "boolean": False, "array": [], "object": {}}
+                if json_type in defaults:
+                    property_schema["default"] = defaults[json_type]
+
         # Add examples
         if field.examples:
             property_schema["examples"] = field.examples
-        
+
         return property_schema
     
     def _convert_type_to_json_schema(self, field_type: FieldType) -> Dict[str, Any]:

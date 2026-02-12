@@ -31,9 +31,14 @@ class SchemaRegistry:
         # Validate URL
         validate_schema_registry_url(self.base_url)
         
-        # Setup authentication
+        # Setup authentication using AuthenticationManager
         self.auth = None
-        if config.schema_registry.username and config.schema_registry.password:
+        from ..plugin.auth import AuthenticationManager
+        auth_manager = AuthenticationManager(config)
+        sr_auth = auth_manager.configure_schema_registry_auth()
+        if sr_auth.get('username') and sr_auth.get('password'):
+            self.auth = (sr_auth['username'], sr_auth['password'])
+        elif config.schema_registry.username and config.schema_registry.password:
             self.auth = (config.schema_registry.username, config.schema_registry.password)
         
         # Setup SSL configuration
