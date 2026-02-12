@@ -68,6 +68,7 @@ class OptimisticProcessor:
         consumer_config.setdefault('log.connection.close', 'false')
         consumer_config.setdefault('log.thread.name', 'false')
         consumer_config.setdefault('broker.address.family', 'v4')
+        consumer_config.setdefault('enable.metrics.push', False)
         consumer_config.setdefault('log.queue', 'false')
         consumer_config.setdefault('statistics.interval.ms', '0')
         consumer_config.setdefault('enable.partition.eof', 'false')

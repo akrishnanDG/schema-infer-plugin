@@ -44,6 +44,7 @@ class KafkaConsumer:
                 "log.connection.close": "false",
                 "log.thread.name": "false",
                 "broker.address.family": "v4",
+                "enable.metrics.push": False,
             }
             
             # Get authentication configuration from authentication manager
