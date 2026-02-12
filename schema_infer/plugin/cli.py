@@ -172,6 +172,10 @@ def main(
     help="🚫 Comma-separated list of additional prefixes to exclude (e.g., '_kafka,__consumer_offsets')",
 )
 @click.option(
+    "--context",
+    help="📦 Schema Registry context for subject name prefixing (e.g., 'my-context' registers as ':.my-context:topic-value')",
+)
+@click.option(
     "--show-auth-info",
     is_flag=True,
     help="🔐 Show authentication information for debugging",
@@ -193,6 +197,7 @@ def infer(
     exclude_internal: Optional[bool],
     internal_prefix: Optional[str],
     additional_exclude_prefixes: Optional[str],
+    context: Optional[str],
     show_auth_info: bool,
 ) -> None:
     """
@@ -244,13 +249,15 @@ def infer(
     """
     
     config = ctx.obj["config"]
-    
+
     # Update topic filter configuration from CLI parameters
     if internal_prefix is not None:
         config.topic_filter.internal_prefix = internal_prefix
     if additional_exclude_prefixes is not None:
         config.topic_filter.additional_exclude_prefixes = [p.strip() for p in additional_exclude_prefixes.split(",") if p.strip()]
-    
+    if context is not None:
+        config.schema_registry.context = context
+
     # Show authentication info if requested
     if show_auth_info:
         auth_manager = AuthenticationManager(config)

@@ -504,35 +504,32 @@ class SchemaRegistry:
     
     def _generate_subject_name(self, topic_name: str, schema_format: str) -> str:
         """
-        Generate subject name based on the configured strategy.
-        
+        Generate subject name based on the configured strategy and optional context.
+
         Args:
             topic_name: Kafka topic name
             schema_format: Schema format (avro, protobuf, json-schema)
-            
+
         Returns:
             Subject name for Schema Registry
         """
         strategy = self.config.schema_registry.subject_name_strategy
-        
+
         if strategy == "TopicNameStrategy":
-            # TopicNameStrategy: <topic-name>-value (for message values)
-            # This is the most common strategy for Kafka topics
-            return f"{topic_name}-value"
-            
+            subject = f"{topic_name}-value"
         elif strategy == "RecordNameStrategy":
-            # RecordNameStrategy: Use the record name from the schema
-            # For now, we'll use topic name as fallback since we don't have record name
             self.logger.warning("RecordNameStrategy requires record name from schema - using topic name as fallback")
-            return topic_name
-            
+            subject = topic_name
         elif strategy == "TopicRecordNameStrategy":
-            # TopicRecordNameStrategy: <topic-name>-<record-name>
-            # For now, we'll use topic name as fallback since we don't have record name
             self.logger.warning("TopicRecordNameStrategy requires record name from schema - using topic name as fallback")
-            return topic_name
-            
+            subject = topic_name
         else:
-            # Fallback to TopicNameStrategy
             self.logger.warning(f"Unknown strategy '{strategy}' - falling back to TopicNameStrategy")
-            return f"{topic_name}-value"
+            subject = f"{topic_name}-value"
+
+        # Apply context prefix if configured
+        context = self.config.schema_registry.context
+        if context:
+            subject = f":.{context}:{subject}"
+
+        return subject

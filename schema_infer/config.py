@@ -55,6 +55,9 @@ class SchemaRegistryConfig(BaseModel):
     
     # Subject name strategy
     subject_name_strategy: str = Field(default="TopicNameStrategy", description="Subject name strategy (TopicNameStrategy, RecordNameStrategy, TopicRecordNameStrategy)")
+
+    # Schema Registry context
+    context: Optional[str] = Field(default=None, description="Schema Registry context for subject name prefixing (e.g., 'my-context' produces ':.my-context:subject-name')")
     
     @field_validator('compatibility')
     @classmethod
