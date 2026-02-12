@@ -61,6 +61,7 @@ class AvroGenerator(BaseSchemaGenerator):
         # Build nested record structure from flat field names
         # Pass schema name as prefix to avoid Avro name collisions across topics
         self._record_prefix = sanitized_name
+        self._used_record_names = set()
         nested_fields = self._build_nested_avro_fields(schema.fields)
         avro_schema["fields"] = nested_fields
         
@@ -106,7 +107,7 @@ class AvroGenerator(BaseSchemaGenerator):
                         "type": "array",
                         "items": {
                             "type": "record",
-                            "name": self._sanitize_avro_name(f"{self._record_prefix}_{field_name}_item"),
+                            "name": self._unique_record_name(f"{self._record_prefix}_{field_name}_item"),
                             "fields": item_fields
                         }
                     },
@@ -123,7 +124,7 @@ class AvroGenerator(BaseSchemaGenerator):
                     "name": self._sanitize_avro_name(top_level),
                     "type": {
                         "type": "record",
-                        "name": self._sanitize_avro_name(f"{self._record_prefix}_{top_level}_record"),
+                        "name": self._unique_record_name(f"{self._record_prefix}_{top_level}_record"),
                         "fields": self._build_nested_avro_record_fields(nested_list, top_level)
                     },
                     "doc": f"Nested record for {top_level}"
@@ -134,7 +135,7 @@ class AvroGenerator(BaseSchemaGenerator):
                     if f["name"] == self._sanitize_avro_name(top_level):
                         f["type"] = {
                             "type": "record",
-                            "name": self._sanitize_avro_name(f"{self._record_prefix}_{top_level}_record"),
+                            "name": self._unique_record_name(f"{self._record_prefix}_{top_level}_record"),
                             "fields": self._build_nested_avro_record_fields(nested_list, top_level)
                         }
                         break
@@ -149,7 +150,7 @@ class AvroGenerator(BaseSchemaGenerator):
                         "type": "array",
                         "items": {
                             "type": "record",
-                            "name": self._sanitize_avro_name(f"{self._record_prefix}_{array_parent}_item"),
+                            "name": self._unique_record_name(f"{self._record_prefix}_{array_parent}_item"),
                             "fields": item_fields
                         }
                     },
@@ -188,7 +189,7 @@ class AvroGenerator(BaseSchemaGenerator):
                     "name": self._sanitize_avro_name(field_name),
                     "type": {
                         "type": "record",
-                        "name": self._sanitize_avro_name(f"{self._record_prefix}_{full_path}_record"),
+                        "name": self._unique_record_name(f"{self._record_prefix}_{full_path}_record"),
                         "fields": self._build_nested_avro_record_fields(nested_entries, full_path)
                     },
                     "doc": f"Nested record for {field_name}"
@@ -269,10 +270,23 @@ class AvroGenerator(BaseSchemaGenerator):
 
         return base_type
     
+    def _unique_record_name(self, base_name: str) -> str:
+        """Generate a unique Avro record name, appending a suffix if needed."""
+        name = self._sanitize_avro_name(base_name)
+        if name not in self._used_record_names:
+            self._used_record_names.add(name)
+            return name
+        counter = 2
+        while f"{name}_{counter}" in self._used_record_names:
+            counter += 1
+        unique = f"{name}_{counter}"
+        self._used_record_names.add(unique)
+        return unique
+
     def _sanitize_avro_name(self, name: str) -> str:
         """
         Sanitize a name for Avro compatibility.
-        
+
         Avro names must:
         - Start with [A-Za-z_]
         - Contain only [A-Za-z0-9_]
