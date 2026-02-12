@@ -183,6 +183,8 @@ class AvroGenerator(BaseSchemaGenerator):
             if leaf_entries and not nested_entries:
                 leaf_field = leaf_entries[0][1]
                 avro_field = self._convert_field_to_avro(leaf_field)
+                # Use the local field name, not the full dotted path
+                avro_field["name"] = self._sanitize_avro_name(field_name)
                 avro_fields.append(avro_field)
             elif nested_entries:
                 nested_record = {
@@ -381,34 +383,37 @@ class ProtobufGenerator(BaseSchemaGenerator):
     
     def _add_protobuf_fields(self, lines: List[str], structure: Dict[str, Any], field_number: int, indent: str) -> int:
         """Add Protobuf fields to lines list."""
-        
-        # Add top-level fields
+
+        # Add top-level fields (skip those that have nested children)
         for field_name, field in structure["top_level_fields"].items():
-            protobuf_field = self._convert_field_to_protobuf(field, field_number)
-            lines.append(f'{indent}{protobuf_field}')
-            field_number += 1
-        
-        # Add nested messages (simplified to avoid recursion)
-        for top_level, nested_list in structure["nested_messages"].items():
-            if top_level not in structure["top_level_fields"]:
-                # Create nested message
-                message_name = self._sanitize_protobuf_name(f"{top_level}_message")
-                field_name = self._sanitize_protobuf_name(top_level)
-                lines.append(f'{indent}{message_name} {field_name} = {field_number}; // Nested message for {top_level}')
+            if field_name not in structure["nested_messages"]:
+                protobuf_field = self._convert_field_to_protobuf(field, field_number)
+                lines.append(f'{indent}{protobuf_field}')
                 field_number += 1
-                
-                # Add nested message definition
-                lines.append(f'{indent}message {message_name} {{')
-                
-                # Add nested fields directly (avoiding recursion for now)
-                for nested_path, field in nested_list:
-                    if '.' not in nested_path:  # Only add leaf fields
-                        protobuf_field = self._convert_field_to_protobuf(field, field_number)
-                        lines.append(f'{indent}  {protobuf_field}')
-                        field_number += 1
-                
-                lines.append(f'{indent}}}')
-        
+
+        # Add nested messages (recursive)
+        for top_level, nested_list in structure["nested_messages"].items():
+            message_name = self._sanitize_protobuf_name(f"{top_level}_message")
+            field_name = self._sanitize_protobuf_name(top_level)
+            lines.append(f'{indent}{message_name} {field_name} = {field_number};')
+            field_number += 1
+
+            # Build sub-structure recursively
+            lines.append(f'{indent}message {message_name} {{')
+            sub_structure = {"top_level_fields": {}, "nested_messages": {}}
+            for nested_path, field in nested_list:
+                if '.' in nested_path:
+                    parts = nested_path.split('.', 1)
+                    sub_top = parts[0]
+                    sub_rest = parts[1]
+                    if sub_top not in sub_structure["nested_messages"]:
+                        sub_structure["nested_messages"][sub_top] = []
+                    sub_structure["nested_messages"][sub_top].append((sub_rest, field))
+                else:
+                    sub_structure["top_level_fields"][nested_path] = field
+            field_number = self._add_protobuf_fields(lines, sub_structure, field_number, indent + "  ")
+            lines.append(f'{indent}}}')
+
         return field_number
     
     def _sanitize_protobuf_name(self, name: str) -> str:
@@ -434,7 +439,9 @@ class ProtobufGenerator(BaseSchemaGenerator):
         protobuf_type = self._convert_type_to_protobuf(field.field_type)
         
         # Protobuf field format: type name = field_number;
-        field_name = self._sanitize_protobuf_name(field.name.lower())
+        # Use the last part of dotted name to get the local field name
+        local_name = field.name.rsplit('.', 1)[-1] if '.' in field.name else field.name
+        field_name = self._sanitize_protobuf_name(local_name)
         
         # Add comment if available
         comment = ""

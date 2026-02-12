@@ -321,16 +321,16 @@ class TestSchemaGenerators:
         profile_fields = field_dict["profile"]["type"]["fields"]
         profile_field_dict = {field["name"]: field for field in profile_fields}
 
-        # Nested field names are sanitized from dot-notation: "profile.firstName"
-        # -> _sanitize_avro_name("profile.firstName") -> "profile_firstName"
-        assert "profile_firstName" in profile_field_dict
-        assert profile_field_dict["profile_firstName"]["type"] == "string"
-        assert "profile_age" in profile_field_dict
-        assert profile_field_dict["profile_age"]["type"] == "int"
-        assert "profile_salary" in profile_field_dict
-        assert profile_field_dict["profile_salary"]["type"] == "double"
-        assert "profile_isEmployed" in profile_field_dict
-        assert profile_field_dict["profile_isEmployed"]["type"] == "boolean"
+        # Nested fields now use clean local names (not full-path prefixed names).
+        # e.g., "profile.firstName" -> local name "firstName" (not "profile_firstName")
+        assert "firstName" in profile_field_dict
+        assert profile_field_dict["firstName"]["type"] == "string"
+        assert "age" in profile_field_dict
+        assert profile_field_dict["age"]["type"] == "int"
+        assert "salary" in profile_field_dict
+        assert profile_field_dict["salary"]["type"] == "double"
+        assert "isEmployed" in profile_field_dict
+        assert profile_field_dict["isEmployed"]["type"] == "boolean"
 
         # profile.address is now a proper nested record keyed as "address"
         # with sub-fields for street, city, zipCode, coordinates, etc.
@@ -339,10 +339,10 @@ class TestSchemaGenerators:
         assert address_field["type"]["type"] == "record"
         assert address_field["type"]["name"] == "comprehensive_test_profile_address_record"
 
-        # Array fields now properly typed
-        assert profile_field_dict["profile_tags"]["type"] == {"type": "array", "items": "string"}
-        assert profile_field_dict["profile_scores"]["type"] == {"type": "array", "items": "int"}
-        assert profile_field_dict["profile_ratings"]["type"] == {"type": "array", "items": "double"}
+        # Array fields now properly typed (using local names)
+        assert profile_field_dict["tags"]["type"] == {"type": "array", "items": "string"}
+        assert profile_field_dict["scores"]["type"] == {"type": "array", "items": "int"}
+        assert profile_field_dict["ratings"]["type"] == {"type": "array", "items": "double"}
 
         # Test nullable fields - lastLogin is nullable<string> -> ["null", "string"]
         assert "lastLogin" in field_dict
@@ -364,20 +364,17 @@ class TestSchemaGenerators:
         assert 'package com_schema_infer_schema_infer;' in lines
         assert 'message comprehensive_test {' in lines
 
-        # Test primitive types - _convert_field_to_protobuf lowercases field names
-        assert any('string userid =' in line for line in lines)
+        # Test primitive types - _convert_field_to_protobuf preserves original casing
+        assert any('string userId =' in line for line in lines)
         assert any('string email =' in line for line in lines)
         assert any('int32 age =' in line for line in lines)
         assert any('double height =' in line for line in lines)
-        assert any('bool isactive =' in line for line in lines)
+        assert any('bool isActive =' in line for line in lines)
 
-        # The protobuf generator only creates nested messages for fields with []
-        # in their names. Profile is a top-level object field (type=object -> "string"
-        # in protobuf). It does NOT get a nested message because nested messages are
-        # only created for fields with '.' that are NOT in top_level_fields.
-        # But profile IS a top-level field, so its nested dot-fields are ignored by
-        # the protobuf generator (which only processes one level of nesting).
-        assert any('string profile =' in line for line in lines)
+        # The protobuf generator now produces recursive nested messages for objects
+        # with dot-notation children. profile is a nested message reference.
+        assert any('profile_message profile =' in line for line in lines)
+        assert any('message profile_message {' in line for line in lines)
 
         # orders[] is a nested message group (brackets sanitized to underscores)
         assert any('orders___message orders__' in line for line in lines)
