@@ -90,16 +90,18 @@ class SchemaInferrer:
                     schema_content = generator.generate(schema_obj)
                     
                     # Determine output file path
+                    extensions = {"avro": "avsc", "protobuf": "proto", "json-schema": "json"}
+                    file_ext = extensions.get(output_format, output_format)
                     if output_dir:
                         import re
                         safe_name = re.sub(r'[^\w\-.]', '_', topic_name)
-                        output_file = str(Path(output_dir) / f"{safe_name}.{output_format}")
+                        output_file = str(Path(output_dir) / f"{safe_name}.{file_ext}")
                     elif output_path and len(topic_messages) == 1:
                         output_file = output_path
                     else:
                         import re
                         safe_name = re.sub(r'[^\w\-.]', '_', topic_name)
-                        output_file = f"{safe_name}.{output_format}"
+                        output_file = f"{safe_name}.{file_ext}"
                     
                     # Write schema to file
                     with open(output_file, 'w') as f:
