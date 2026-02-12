@@ -176,34 +176,26 @@ class AvroGenerator(BaseSchemaGenerator):
     
     def _convert_type_to_avro(self, field_type: FieldType) -> Any:
         """Convert FieldType to Avro type."""
-        
+
         # Map our types to Avro types
+        # Note: "object", "array", and "union" are not valid standalone Avro types,
+        # so they fall back to "string" to produce a valid schema.
         type_mapping = {
             "string": "string",
             "int": "int",
             "float": "double",
             "boolean": "boolean",
             "null": "null",
-            "object": "record",
-            "array": "array",
-            "union": "union"
         }
-        
+
         base_type = type_mapping.get(field_type.name, "string")
-        
+
         if field_type.array:
-            if base_type == "record":
-                # For object arrays, we need to define the record type
-                return {
-                    "type": "array",
-                    "items": "string"  # Simplified for now
-                }
-            else:
-                return {
-                    "type": "array",
-                    "items": base_type
-                }
-        
+            return {
+                "type": "array",
+                "items": base_type
+            }
+
         return base_type
     
     def _sanitize_avro_name(self, name: str) -> str:

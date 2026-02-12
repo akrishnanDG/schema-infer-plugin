@@ -336,9 +336,10 @@ class TestSchemaGenerators:
 
         # profile.address is a leaf field in the profile group (type=object -> "record")
         # It does NOT become a nested record with sub-fields because it is treated as a
-        # leaf (it has a None remaining path). So its type is just "record" (a string).
+        # leaf (it has a None remaining path). Invalid Avro types like "record" and "union"
+        # fall back to "string" to produce a valid schema.
         assert "profile_address" in profile_field_dict
-        assert profile_field_dict["profile_address"]["type"] == "record"
+        assert profile_field_dict["profile_address"]["type"] == "string"
 
         # Array fields are inferred as their element type, not as arrays.
         # profile.tags -> type="string", profile.scores -> type="int",

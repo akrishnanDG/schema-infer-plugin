@@ -399,6 +399,19 @@ def infer(
                 
                 success_count = results['successful']
                 error_count = results['failed']
+
+                # Register schemas if requested
+                if register and registry and results['schemas']:
+                    click.echo(f"\n📤 Registering {len(results['schemas'])} schemas to Schema Registry...")
+                    for topic_name, schema_dict in results['schemas'].items():
+                        try:
+                            schema_content = inferrer.generate_schema(schema_dict, format)
+                            schema_id = registry.register_schema(topic_name, schema_content, format)
+                            click.echo(f"  ✅ {topic_name}: Registered with ID {schema_id}")
+                        except Exception as e:
+                            click.echo(f"  ❌ {topic_name}: Registration failed - {e}", err=True)
+                            error_count += 1
+                            success_count -= 1
             else:
                 success_count = 0
                 error_count = len(topic_list)
