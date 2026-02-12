@@ -367,10 +367,10 @@ class TestSchemaGenerators:
         lines = protobuf_schema_str.split('\n')
 
         # Basic structure - schema.name is "comprehensive_test" (underscore, not hyphen)
-        # The protobuf generator uses schema.name directly without sanitization for the
-        # message name. The package uses schema.namespace with dots replaced by underscores.
+        # The protobuf generator sanitizes names to remove hyphens and special chars.
+        # The package uses schema.namespace with dots replaced by underscores and sanitized.
         assert 'syntax = "proto3";' in lines
-        assert 'package com_schema-infer_schema_infer;' in lines
+        assert 'package com_schema_infer_schema_infer;' in lines
         assert 'message comprehensive_test {' in lines
 
         # Test primitive types - _convert_field_to_protobuf lowercases field names
@@ -388,8 +388,8 @@ class TestSchemaGenerators:
         # the protobuf generator (which only processes one level of nesting).
         assert any('string profile =' in line for line in lines)
 
-        # orders[] is a nested message group
-        assert any('orders___message orders[]' in line for line in lines)
+        # orders[] is a nested message group (brackets sanitized to underscores)
+        assert any('orders___message orders__' in line for line in lines)
         assert any('message orders___message {' in line for line in lines)
 
         # Test field numbering

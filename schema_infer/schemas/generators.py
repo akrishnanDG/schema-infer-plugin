@@ -251,12 +251,13 @@ class ProtobufGenerator(BaseSchemaGenerator):
         
         # Add package
         if schema.namespace:
-            package_name = schema.namespace.replace(".", "_").lower()
+            package_name = self._sanitize_protobuf_name(schema.namespace.replace(".", "_").lower())
             lines.append(f'package {package_name};')
             lines.append("")
-        
+
         # Add message definition
-        lines.append(f'message {schema.name} {{')
+        message_name = self._sanitize_protobuf_name(schema.name)
+        lines.append(f'message {message_name} {{')
         
         if schema.description:
             lines.append(f'  // {schema.description}')
@@ -307,7 +308,8 @@ class ProtobufGenerator(BaseSchemaGenerator):
             if top_level not in structure["top_level_fields"]:
                 # Create nested message
                 message_name = self._sanitize_protobuf_name(f"{top_level}_message")
-                lines.append(f'{indent}{message_name} {top_level} = {field_number}; // Nested message for {top_level}')
+                field_name = self._sanitize_protobuf_name(top_level)
+                lines.append(f'{indent}{message_name} {field_name} = {field_number}; // Nested message for {top_level}')
                 field_number += 1
                 
                 # Add nested message definition
@@ -347,7 +349,7 @@ class ProtobufGenerator(BaseSchemaGenerator):
         protobuf_type = self._convert_type_to_protobuf(field.field_type)
         
         # Protobuf field format: type name = field_number;
-        field_name = field.name.lower().replace(" ", "_")
+        field_name = self._sanitize_protobuf_name(field.name.lower())
         
         # Add comment if available
         comment = ""
