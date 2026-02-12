@@ -3,6 +3,7 @@ Schema Registry integration for Schema Inference Plugin
 """
 
 import json
+import time
 import requests
 from typing import Any, Dict, List, Optional
 
@@ -71,45 +72,48 @@ class SchemaRegistry:
         """
         
         try:
-            # Generate subject name based on strategy
             subject_name = self._generate_subject_name(topic_name, schema_format)
-            
-            # Map format to registry type
             registry_type = self._map_format_to_registry_type(schema_format)
-            
-            # Prepare schema data
             schema_data = {
                 "schema": schema_content,
                 "schemaType": registry_type
             }
-            
-            # Set compatibility level if not NONE
+
             if self.config.schema_registry.compatibility != "NONE":
                 self._set_subject_compatibility(subject_name, self.config.schema_registry.compatibility)
-            
-            # Register schema
-            url = f"{self.base_url}/subjects/{subject_name}/versions"
-            
-            self.logger.info(f"Registering schema for topic '{topic_name}' with subject '{subject_name}' using {self.config.schema_registry.subject_name_strategy} strategy")
-            
-            response = requests.post(
-                url,
-                json=schema_data,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
-                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
-                timeout=(5, 30)
-            )
 
-            response.raise_for_status()
+            url = f"{self.base_url}/subjects/{subject_name}/versions"
+            self.logger.info(f"Registering schema for topic '{topic_name}' with subject '{subject_name}'")
+
+            # Retry with exponential backoff
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        url,
+                        json=schema_data,
+                        auth=self.auth,
+                        cert=self.cert,
+                        verify=self.verify_ssl,
+                        headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
+                        timeout=(5, 30)
+                    )
+                    response.raise_for_status()
+                    break
+                except requests.exceptions.ConnectionError as e:
+                    if attempt < max_retries - 1:
+                        wait = 2 ** attempt
+                        self.logger.warning(f"Connection failed, retrying in {wait}s (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(wait)
+                    else:
+                        raise
 
             result = response.json()
             schema_id = result.get("id")
-            
+
             if schema_id is None:
                 raise SchemaRegistryError("No schema ID returned from registry")
-            
+
             self.logger.info(f"Successfully registered schema with ID: {schema_id}")
             return schema_id
             

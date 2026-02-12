@@ -3,6 +3,7 @@ Schema inference engine for analyzing data and generating schema definitions
 """
 
 import json
+import re
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional, Set, Union
 
@@ -147,7 +148,14 @@ class SchemaInferrer:
         self.array_handling = array_handling
         self.null_handling = null_handling
         self.logger = get_logger(__name__)
-    
+
+    # ISO 8601 datetime patterns
+    _DATETIME_PATTERNS = [
+        re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),  # 2025-12-01T10:00:00
+        re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'),   # 2025-12-01 10:00:00
+    ]
+    _DATE_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}$')          # 2025-12-01
+
     def infer_schema(self, parsed_data: List[Dict[str, Any]], schema_name: str) -> InferredSchema:
         """
         Infer schema from parsed data.
@@ -282,6 +290,12 @@ class SchemaInferrer:
         elif isinstance(value, float):
             return FieldType("float")
         elif isinstance(value, str):
+            # Check for datetime patterns
+            for pattern in self._DATETIME_PATTERNS:
+                if pattern.match(value):
+                    return FieldType("datetime")
+            if self._DATE_PATTERN.match(value):
+                return FieldType("date")
             return FieldType("string")
         elif isinstance(value, list):
             if not value:
@@ -386,6 +400,15 @@ class SchemaInferrer:
             if type_name.startswith("array<") and type_name.endswith(">"):
                 is_array = True
                 base_type_name = type_name[6:-1]  # Extract inner type
+
+            # Detect enum types: string fields with limited distinct values
+            if base_type_name == "string" and not is_array:
+                string_examples = [ex for ex in analysis.get("examples", set()) if isinstance(ex, str)]
+                non_null_count = total_count - null_count
+                if (2 <= len(string_examples) <= 10
+                        and non_null_count >= 3
+                        and len(string_examples) < non_null_count * 0.5):
+                    base_type_name = "enum"
 
             field_type = FieldType(base_type_name, nullable=nullable, array=is_array)
         

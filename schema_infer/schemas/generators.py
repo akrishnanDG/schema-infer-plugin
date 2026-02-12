@@ -67,34 +67,56 @@ class AvroGenerator(BaseSchemaGenerator):
     def _build_nested_avro_fields(self, fields: List[SchemaField]) -> List[Dict[str, Any]]:
         """Build nested record structure from flat field names."""
         avro_fields = []
-        
-        # Group fields by their top-level name
+
+        # Group fields
         top_level_fields = {}
         nested_fields = {}
-        
+        array_child_fields = {}
+
         for field in fields:
-            if '.' in field.name:
-                # This is a nested field
+            if '[]' in field.name:
+                array_parent = field.name.split('[]')[0]
+                child_path = field.name.split('[]', 1)[1]
+                if child_path.startswith('.'):
+                    child_path = child_path[1:]
+                if array_parent not in array_child_fields:
+                    array_child_fields[array_parent] = []
+                if child_path:
+                    array_child_fields[array_parent].append((child_path, field))
+            elif '.' in field.name:
                 parts = field.name.split('.')
                 top_level = parts[0]
                 nested_path = '.'.join(parts[1:])
-                
                 if top_level not in nested_fields:
                     nested_fields[top_level] = []
                 nested_fields[top_level].append((nested_path, field))
             else:
-                # This is a top-level field
                 top_level_fields[field.name] = field
-        
+
         # Add top-level fields
         for field_name, field in top_level_fields.items():
-            avro_field = self._convert_field_to_avro(field)
+            if field_name in array_child_fields and array_child_fields[field_name]:
+                # Array with known item schema
+                item_fields = self._build_nested_avro_record_fields(array_child_fields[field_name])
+                avro_field = {
+                    "name": self._sanitize_avro_name(field_name),
+                    "type": {
+                        "type": "array",
+                        "items": {
+                            "type": "record",
+                            "name": self._sanitize_avro_name(f"{field_name}_item"),
+                            "fields": item_fields
+                        }
+                    },
+                    "doc": field.description or f"Field {field_name}"
+                }
+            else:
+                avro_field = self._convert_field_to_avro(field)
             avro_fields.append(avro_field)
-        
+
         # Add nested fields as record types
         for top_level, nested_list in nested_fields.items():
             if top_level not in top_level_fields:
-                # Create record type for nested structure
                 nested_record = {
                     "name": self._sanitize_avro_name(top_level),
                     "type": {
@@ -106,16 +128,32 @@ class AvroGenerator(BaseSchemaGenerator):
                 }
                 avro_fields.append(nested_record)
             else:
-                # Update existing top-level field to be a record type
-                for i, field in enumerate(avro_fields):
-                    if field["name"] == self._sanitize_avro_name(top_level):
-                        field["type"] = {
+                for i, f in enumerate(avro_fields):
+                    if f["name"] == self._sanitize_avro_name(top_level):
+                        f["type"] = {
                             "type": "record",
                             "name": self._sanitize_avro_name(f"{top_level}_record"),
                             "fields": self._build_nested_avro_record_fields(nested_list)
                         }
                         break
-        
+
+        # Add remaining array child groups without parent
+        for array_parent, children in array_child_fields.items():
+            if array_parent not in top_level_fields and children:
+                item_fields = self._build_nested_avro_record_fields(children)
+                avro_fields.append({
+                    "name": self._sanitize_avro_name(array_parent),
+                    "type": {
+                        "type": "array",
+                        "items": {
+                            "type": "record",
+                            "name": self._sanitize_avro_name(f"{array_parent}_item"),
+                            "fields": item_fields
+                        }
+                    },
+                    "doc": f"Array field {array_parent}"
+                })
+
         return avro_fields
     
     def _build_nested_avro_record_fields(self, nested_fields: List[tuple]) -> List[Dict[str, Any]]:
@@ -189,6 +227,9 @@ class AvroGenerator(BaseSchemaGenerator):
             "float": "double",
             "boolean": "boolean",
             "null": "null",
+            "datetime": "string",  # Avro uses string with logicalType
+            "date": "string",
+            "enum": "string",      # Simplified enum as string
         }
 
         base_type = type_mapping.get(field_type.name, "string")
@@ -370,10 +411,13 @@ class ProtobufGenerator(BaseSchemaGenerator):
             "int": "int32",
             "float": "double",
             "boolean": "bool",
-            "null": "string",  # Protobuf doesn't have null type
-            "object": "string",  # Simplified for now
+            "null": "string",
+            "object": "string",
             "array": "repeated",
-            "union": "string"  # Simplified for now
+            "union": "string",
+            "datetime": "string",  # Protobuf uses string for timestamps
+            "date": "string",
+            "enum": "string",
         }
         
         base_type = type_mapping.get(field_type.name, "string")
@@ -422,47 +466,84 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
         """Build nested object structure from flat field names."""
         properties = {}
         required = []
-        
+
         # Group fields by their top-level name
         top_level_fields = {}
         nested_fields = {}
-        
+        array_child_fields = {}  # Fields like items[].sku
+
         for field in fields:
-            if '.' in field.name:
-                # This is a nested field
+            if '[]' in field.name:
+                # Array child field - group by array parent
+                array_parent = field.name.split('[]')[0]
+                child_path = field.name.split('[]', 1)[1]
+                if child_path.startswith('.'):
+                    child_path = child_path[1:]
+                if array_parent not in array_child_fields:
+                    array_child_fields[array_parent] = []
+                if child_path:  # Only add if there's a child path
+                    array_child_fields[array_parent].append((child_path, field))
+            elif '.' in field.name:
+                # Nested object field
                 parts = field.name.split('.')
                 top_level = parts[0]
                 nested_path = '.'.join(parts[1:])
-                
                 if top_level not in nested_fields:
                     nested_fields[top_level] = []
                 nested_fields[top_level].append((nested_path, field))
             else:
-                # This is a top-level field
                 top_level_fields[field.name] = field
-        
+
         # Add top-level fields
         for field_name, field in top_level_fields.items():
             property_schema = self._convert_field_to_json_schema(field)
+
+            # If this field has array children, enhance the items definition
+            if field_name in array_child_fields and array_child_fields[field_name]:
+                child_props = self._build_nested_structure(
+                    [(p, f) for p, f in array_child_fields[field_name]]
+                )
+                property_schema = {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": child_props["properties"],
+                        "required": child_props["required"]
+                    }
+                }
+                if field.description:
+                    property_schema["description"] = field.description
+
             properties[field_name] = property_schema
             if field.required:
                 required.append(field_name)
-        
+
         # Add nested fields
         for top_level, nested_list in nested_fields.items():
             if top_level not in properties:
-                # Create object type for nested structure
                 properties[top_level] = {
                     "type": "object",
                     "properties": {},
                     "required": []
                 }
-            
-            # Build nested structure
+
             nested_props = self._build_nested_structure(nested_list)
             properties[top_level]["properties"] = nested_props["properties"]
             properties[top_level]["required"] = nested_props["required"]
-        
+
+        # Add remaining array child groups that don't have a parent top-level field
+        for array_parent, children in array_child_fields.items():
+            if array_parent not in properties and children:
+                child_props = self._build_nested_structure(children)
+                properties[array_parent] = {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": child_props["properties"],
+                        "required": child_props["required"]
+                    }
+                }
+
         return {
             "properties": properties,
             "required": required
@@ -515,7 +596,13 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
         """Convert a schema field to JSON Schema format."""
         
         property_schema = self._convert_type_to_json_schema(field.field_type)
-        
+
+        # Add format for datetime/date types
+        if field.field_type.name == "datetime":
+            property_schema["format"] = "date-time"
+        elif field.field_type.name == "date":
+            property_schema["format"] = "date"
+
         # Add description
         if field.description:
             property_schema["description"] = field.description
@@ -542,7 +629,10 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
             "null": "null",
             "object": "object",
             "array": "array",
-            "union": "string"  # Simplified for now
+            "union": "string",
+            "datetime": "string",
+            "date": "string",
+            "enum": "string",
         }
         
         base_type = type_mapping.get(field_type.name, "string")

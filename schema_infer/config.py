@@ -235,7 +235,16 @@ def load_config(config_path: Optional[Path] = None) -> Config:
                 config_data = json.load(f)
             else:
                 raise ValueError(f"Unsupported config file format: {config_path.suffix}")
-    
+
+        # Validate top-level config keys
+        valid_sections = {"kafka", "schema_registry", "inference", "performance", "logging", "topic_filter",
+                         "bootstrap_servers", "schema_registry_url", "log_level", "max_messages",
+                         "timeout", "auto_detect_format", "forced_data_format", "background"}
+        unknown_keys = set(config_data.keys()) - valid_sections
+        if unknown_keys:
+            import warnings
+            warnings.warn(f"Unknown config keys will be ignored: {', '.join(sorted(unknown_keys))}")
+
     # Load from environment variables
     env_config = {}
     for key, value in os.environ.items():

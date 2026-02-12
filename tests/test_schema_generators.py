@@ -263,20 +263,16 @@ class TestSchemaGenerators:
         assert profile_props["ratings"]["type"] == "array"
         assert profile_props["ratings"]["items"] == {"type": "number"}
 
-        # phoneNumbers is now a proper array of objects
+        # phoneNumbers is a proper array (children are merged at top-level only)
         assert "phoneNumbers" in profile_props
         assert profile_props["phoneNumbers"]["type"] == "array"
-        assert profile_props["phoneNumbers"]["items"] == {"type": "object"}
 
-        # The array children are represented separately with [] notation
-        assert "phoneNumbers[]" in profile_props
-        assert profile_props["phoneNumbers[]"]["type"] == "object"
-        assert "properties" in profile_props["phoneNumbers[]"]
-
-        # orders is now a proper array of objects at the top level
+        # orders is now a proper array with item schema merged from children
         assert "orders" in properties
         assert properties["orders"]["type"] == "array"
-        assert properties["orders"]["items"] == {"type": "object"}
+        order_items = properties["orders"]["items"]
+        assert order_items["type"] == "object"
+        assert "properties" in order_items
 
         # Test examples are included
         assert "examples" in properties["userId"]
@@ -517,12 +513,14 @@ class TestSchemaGenerators:
         assert json_schema["properties"]["boolean_array"]["type"] == "array"
         assert json_schema["properties"]["boolean_array"]["items"] == {"type": "boolean"}
         assert json_schema["properties"]["object_array"]["type"] == "array"
-        assert json_schema["properties"]["object_array"]["items"] == {"type": "object"}
+        obj_items = json_schema["properties"]["object_array"]["items"]
+        assert obj_items["type"] == "object"
+        assert "properties" in obj_items
+        assert "id" in obj_items["properties"]
+        assert "name" in obj_items["properties"]
 
-        # object_array children are represented with [] notation
-        assert "object_array[]" in json_schema["properties"]
-        assert json_schema["properties"]["object_array[]"]["type"] == "object"
-        assert "properties" in json_schema["properties"]["object_array[]"]
+        # object_array[] should NOT appear as separate top-level entry
+        assert "object_array[]" not in json_schema["properties"]
 
         # Avro - arrays now have proper array types
         avro_schema_str = self.avro_generator.generate(array_schema)

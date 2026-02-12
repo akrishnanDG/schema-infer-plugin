@@ -176,68 +176,49 @@ def test_plugin():
         return False
 
 
-def create_requirements_file():
-    """Create requirements.txt file."""
-    
-    requirements = [
-        "confluent-kafka>=2.3.0",
-        "click>=8.0.0",
-        "pydantic>=2.0.0",
-        "jsonschema>=4.0.0",
-        "protobuf>=4.0.0",
-        "tqdm>=4.64.0",
-        "pyyaml>=6.0",
-        "requests>=2.28.0",
-    ]
-    
-    with open("requirements.txt", "w") as f:
-        f.write("\n".join(requirements))
-    
-    print("✓ Created requirements.txt")
-
-
 def main():
     """Main installation function."""
-    
-    print("Schema Inference CLI Schema Inference Plugin Installation")
-    print("=" * 55)
-    
-    # Check if we're in the right directory
-    if not Path("schema-infer-schema").exists():
-        print("✗ schema-infer-schema not found. Please run this script from the project root.")
-        sys.exit(1)
-    
-    # Create requirements file
-    create_requirements_file()
-    
-    # Install dependencies
-    if not install_requirements():
-        sys.exit(1)
-    
-    # Install package
-    if not install_package():
+
+    print("Schema Inference CLI Plugin Installation")
+    print("=" * 45)
+
+    # Check Python version
+    import sys
+    if sys.version_info < (3, 9):
+        print(f"✗ Python 3.9+ required (found {sys.version})")
         sys.exit(1)
 
-    # Install plugin
-    if not install_plugin():
+    project_root = Path(__file__).parent
+
+    # Install package with pip
+    print("Installing package and dependencies...")
+    try:
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "-e", str(project_root)
+        ])
+        print("✓ Package installed successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"✗ Installation failed: {e}")
         sys.exit(1)
-    
-    # Test plugin
-    if not test_plugin():
-        print("\n⚠️  Plugin installed but not working properly.")
-        print("Please check the PATH configuration and try again.")
-        sys.exit(1)
-    
-    print("\n" + "=" * 55)
-    print("🎉 Installation completed successfully!")
-    print("\nYou can now use the plugin with:")
-    print("  schema-infer schema --help")
-    print("  schema-infer schema infer --help")
-    print("  schema-infer schema list-topics")
-    print("  schema-infer schema validate-topics --topics my-topic")
-    print("\nFor Schema Inference Cloud, set these environment variables:")
-    print("  export CLOUD_API_KEY='your-api-key'")
-    print("  export CLOUD_API_SECRET='your-api-secret'")
+
+    # Verify
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "schema_infer.plugin.cli", "--help"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            print("✓ Plugin verified successfully")
+        else:
+            print("⚠ Plugin installed but verification failed")
+    except Exception as e:
+        print(f"⚠ Could not verify: {e}")
+
+    print("\n" + "=" * 45)
+    print("Installation complete!")
+    print("\nUsage:")
+    print("  schema-infer --help")
+    print("  schema-infer --bootstrap-servers localhost:9092 list-topics")
 
 
 if __name__ == "__main__":

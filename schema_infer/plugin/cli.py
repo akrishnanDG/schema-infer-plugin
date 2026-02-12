@@ -406,6 +406,14 @@ def infer(
                     for topic_name, schema_dict in results['schemas'].items():
                         try:
                             schema_content = inferrer.generate_schema(schema_dict, format)
+                            # Validate schema before registration
+                            from ..utils.validators import validate_generated_schema
+                            is_valid, validation_error = validate_generated_schema(schema_content, format)
+                            if not is_valid:
+                                click.echo(f"  ❌ {topic_name}: Generated schema is invalid: {validation_error}", err=True)
+                                error_count += 1
+                                success_count -= 1
+                                continue
                             schema_id = registry.register_schema(topic_name, schema_content, format)
                             click.echo(f"  ✅ {topic_name}: Registered with ID {schema_id}")
                         except Exception as e:
@@ -430,7 +438,7 @@ def infer(
                 total=len(topic_list),
                 desc="Processing topic",
                 unit="topic",
-                disable=not config.performance.show_progress,
+                disable=True,  # No progress bar for single topic
                 bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
                 dynamic_ncols=True
             )
@@ -509,6 +517,19 @@ def infer(
                 
                     # Output schema
                     if register and registry:
+                        # Validate schema before registration
+                        from ..utils.validators import validate_generated_schema
+                        is_valid, validation_error = validate_generated_schema(schema_content, format)
+                        if not is_valid:
+                            error_reason = f"Generated schema is invalid: {validation_error}"
+                            error_details.append({
+                                'topic': topic_name,
+                                'reason': error_reason,
+                                'type': 'schema_validation_error'
+                            })
+                            click.echo(f"  ❌ {topic_name}: {error_reason}", err=True)
+                            error_count += 1
+                            continue
                         try:
                             schema_id = registry.register_schema(topic_name, schema_content, format)
                             if not config.performance.show_progress:
@@ -622,9 +643,10 @@ def infer(
                     'permission_error': '🚫',
                     'schema_inference_failed': '🧠',
                     'schema_registry_error': '📋',
+                    'schema_validation_error': '🔎',
                     'processing_error': '⚙️'
                 }.get(error_type, '❌')
-                
+
                 type_name = {
                     'empty': 'Empty Topics',
                     'network_error': 'Network Issues',
@@ -633,6 +655,7 @@ def infer(
                     'permission_error': 'Permission Issues',
                     'schema_inference_failed': 'Schema Inference Failed',
                     'schema_registry_error': 'Schema Registry Issues',
+                    'schema_validation_error': 'Schema Validation Errors',
                     'processing_error': 'Processing Errors'
                 }.get(error_type, 'Other Errors')
                 
@@ -654,6 +677,9 @@ def infer(
             if any(e['type'] == 'schema_inference_failed' for e in error_details):
                 click.echo(f"  • Messages may be in binary format or unsupported structure")
                 click.echo(f"  • Try specifying --data-format explicitly")
+            if any(e['type'] == 'schema_validation_error' for e in error_details):
+                click.echo(f"  • The generated schema has structural issues")
+                click.echo(f"  • Try a different --format or increase --max-messages for better inference")
     
     if error_count > 0:
         sys.exit(1)
