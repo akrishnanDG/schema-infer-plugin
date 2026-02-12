@@ -398,6 +398,44 @@ schema-infer validate-topics --topics "user-events,order-events"
 schema-infer validate-topics --topics "user-events" --check-connectivity --check-schema-registry
 ```
 
+#### `watch` - Continuous Monitoring
+
+Continuously monitor the cluster for new topics, infer schemas, and register them automatically.
+
+```bash
+# Basic watch with registration
+schema-infer --config config.yaml watch --register --context production
+
+# Watch with custom settings
+schema-infer --config config.yaml watch \
+  --topic-pattern "prod-.*" \
+  --format avro \
+  --register \
+  --context production \
+  --interval 30 \
+  --max-messages 100 \
+  --output-dir ./schemas
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--topic-pattern` | `.*` | Regex pattern to filter topics |
+| `--format` | `avro` | Schema format (avro, protobuf, json-schema) |
+| `--output-dir` | `./schemas` | Directory for schema files |
+| `--register` | off | Register schemas to Schema Registry |
+| `--context` | none | Schema Registry context prefix |
+| `--interval` | `60` | Polling interval in seconds |
+| `--max-messages` | `50` | Messages to sample per topic |
+| `--exclude-internal` | on | Exclude internal topics |
+
+The watch command:
+- Detects new topics on each polling cycle
+- Infers schemas and saves to disk
+- Validates schemas before registration
+- Skips previously processed topics
+- Handles errors gracefully without stopping
+- Stops cleanly on Ctrl+C with a summary
+
 #### `version` - Version Information
 
 Show version and build information.

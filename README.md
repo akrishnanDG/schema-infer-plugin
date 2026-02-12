@@ -16,6 +16,7 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 - **🔐 Enterprise Security**: Full Schema Inference Cloud and Platform authentication support
 - **📊 Schema Registry Integration**: Automatic registration with compatibility management
 - **🛡️ Production Ready**: Schema validation, retry logic, and comprehensive error handling
+- **👁️ Continuous Monitoring**: Watch mode for automatic schema inference on new topics
 
 ## 📖 Documentation
 
@@ -130,6 +131,20 @@ schema_registry:
   compatibility: "BACKWARD"
   subject_name_strategy: "TopicNameStrategy"
 ```
+
+### Watch Mode (Continuous Monitoring)
+```bash
+# Watch for new topics and auto-register Avro schemas
+schema-infer --config config.yaml watch --register --context production
+
+# Custom interval and format
+schema-infer --config config.yaml watch --interval 30 --format json-schema --output-dir ./schemas
+
+# Watch with topic filtering
+schema-infer --config config.yaml watch --topic-pattern "prod-.*" --register --context prod
+```
+
+Watch mode continuously polls the cluster, detects new topics, infers schemas, and optionally registers them to Schema Registry. Topics are only processed once.
 
 ### Performance Optimization
 ```bash
