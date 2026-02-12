@@ -919,10 +919,10 @@ def version() -> None:
     """
     📋 Show plugin version and build information
     
-    Display the current version of the Schema Inference Schema Inference Plugin
+    Display the current version of the Schema Inference Plugin
     along with build information for debugging and support purposes.
     """
-    click.echo(f"Schema Inference Schema Inference Plugin")
+    click.echo(f"Schema Inference Plugin")
     click.echo(f"Version: {PLUGIN_VERSION}")
     click.echo(f"Build: {PLUGIN_BUILD}")
     click.echo(f"Python: {sys.version.split()[0]}")

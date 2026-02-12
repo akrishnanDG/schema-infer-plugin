@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive test runner for the Schema Inference Schema Inference Plugin
+Comprehensive test runner for the Schema Inference Plugin
 """
 
 import sys
@@ -159,7 +159,7 @@ def check_dependencies():
 def main():
     """Main entry point for the test runner."""
     parser = argparse.ArgumentParser(
-        description="Comprehensive test runner for Schema Inference Schema Inference Plugin",
+        description="Comprehensive test runner for Schema Inference Plugin",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

@@ -1,6 +1,6 @@
 # Comprehensive Testing Guide
 
-This document provides a comprehensive guide to testing the Schema Inference Schema Inference Plugin.
+This document provides a comprehensive guide to testing the Schema Inference Plugin.
 
 ## Overview
 

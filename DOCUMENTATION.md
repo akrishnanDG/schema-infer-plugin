@@ -1,4 +1,4 @@
-# Schema Inference Schema Inference Plugin - Product Documentation
+# Schema Inference Plugin - Product Documentation
 
 ## Table of Contents
 
@@ -23,7 +23,7 @@
 
 ## Overview
 
-The **Schema Inference Schema Inference Plugin** is a powerful CLI tool that automatically infers and generates schemas from Kafka topic data. It supports multiple schema formats (JSON Schema, Avro, Protobuf) and can handle complex nested data structures with comprehensive data type detection.
+The **Schema Inference Plugin** is a powerful CLI tool that automatically infers and generates schemas from Kafka topic data. It supports multiple schema formats (JSON Schema, Avro, Protobuf) and can handle complex nested data structures with comprehensive data type detection.
 
 ### Key Benefits
 
@@ -1276,7 +1276,7 @@ python run_tests.py --coverage
 
 ## Conclusion
 
-The Schema Inference Schema Inference Plugin provides a powerful, flexible, and production-ready solution for automatic schema generation from Kafka topics. With support for multiple schema formats, comprehensive data type detection, and enterprise-grade security, it's the ideal tool for modern data architectures.
+The Schema Inference Plugin provides a powerful, flexible, and production-ready solution for automatic schema generation from Kafka topics. With support for multiple schema formats, comprehensive data type detection, and enterprise-grade security, it's the ideal tool for modern data architectures.
 
 Whether you're migrating from untyped to typed systems, establishing data governance, or accelerating development workflows, this plugin provides the tools and flexibility you need to succeed.
 

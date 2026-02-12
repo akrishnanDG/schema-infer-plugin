@@ -1,6 +1,6 @@
 # Examples
 
-Comprehensive examples for the Schema Inference Schema Inference Plugin.
+Comprehensive examples for the Schema Inference Plugin.
 
 ## Table of Contents
 
@@ -692,15 +692,24 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY pyproject.toml requirements.txt ./
+COPY schema_infer/ schema_infer/
 
-COPY . .
-RUN pip install -e .
+RUN pip install --no-cache-dir .
 
-COPY config/ /app/config/
+ENTRYPOINT ["schema-infer"]
+CMD ["--help"]
+```
 
-CMD ["schema-infer", "schema", "--config", "/app/config/schema-infer.yaml", "infer", "--topic-prefix", "prod-", "--format", "avro", "--output-dir", "/app/schemas/"]
+**Run with Docker**:
+```bash
+# Build
+docker build -t schema-infer .
+
+# Infer schemas (mount config and output dirs)
+docker run -v $(pwd)/config:/app/config -v $(pwd)/schemas:/app/schemas \
+  schema-infer --config /app/config/schema-infer.yaml \
+  infer --topic-prefix "prod-" --format avro --output-dir /app/schemas/
 ```
 
 **Docker Compose**:
@@ -857,4 +866,4 @@ schema-infer --config registry-debug-config.yaml infer --topic "test-topic" --fo
 
 ---
 
-These examples demonstrate the versatility and power of the Schema Inference Schema Inference Plugin across various use cases, from simple single-topic scenarios to complex enterprise deployments. Each example includes configuration files, commands, and expected outputs to help you get started quickly.
+These examples demonstrate the versatility and power of the Schema Inference Plugin across various use cases, from simple single-topic scenarios to complex enterprise deployments. Each example includes configuration files, commands, and expected outputs to help you get started quickly.

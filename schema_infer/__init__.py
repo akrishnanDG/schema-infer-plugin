@@ -1,5 +1,5 @@
 """
-Schema Inference Schema Inference Plugin
+Schema Inference Plugin
 
 A powerful tool for automatically inferring schemas from Kafka topic data.
 """
