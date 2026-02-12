@@ -243,38 +243,40 @@ class TestSchemaGenerators:
         assert "isEmployed" in profile_props
         assert profile_props["isEmployed"]["type"] == "boolean"
 
-        # The generator treats profile.address as a leaf field in the profile
-        # group because it exists as both a direct field AND has sub-fields.
-        # When a field has a None remaining path, it is treated as a leaf,
-        # so it gets type "object" without nested "properties".
+        # The generator now correctly produces nested records for nested objects.
+        # address is a proper nested object with its own properties.
         assert "address" in profile_props
         assert profile_props["address"]["type"] == "object"
-        # address is a leaf in the nested structure - no nested properties
-        assert "description" in profile_props["address"]
+        assert "properties" in profile_props["address"]
+        assert "street" in profile_props["address"]["properties"]
 
-        # Array fields are inferred with their element type (not as "array"),
-        # so tags becomes "string", scores becomes "integer", ratings becomes "number"
+        # Array fields now have proper array types with items
         assert "tags" in profile_props
-        assert profile_props["tags"]["type"] == "string"
+        assert profile_props["tags"]["type"] == "array"
+        assert profile_props["tags"]["items"] == {"type": "string"}
 
         assert "scores" in profile_props
-        assert profile_props["scores"]["type"] == "integer"
+        assert profile_props["scores"]["type"] == "array"
+        assert profile_props["scores"]["items"] == {"type": "integer"}
 
         assert "ratings" in profile_props
-        assert profile_props["ratings"]["type"] == "number"
+        assert profile_props["ratings"]["type"] == "array"
+        assert profile_props["ratings"]["items"] == {"type": "number"}
 
-        # phoneNumbers is inferred as "object" type (array of objects becomes object)
+        # phoneNumbers is now a proper array of objects
         assert "phoneNumbers" in profile_props
-        assert profile_props["phoneNumbers"]["type"] == "object"
+        assert profile_props["phoneNumbers"]["type"] == "array"
+        assert profile_props["phoneNumbers"]["items"] == {"type": "object"}
 
         # The array children are represented separately with [] notation
         assert "phoneNumbers[]" in profile_props
         assert profile_props["phoneNumbers[]"]["type"] == "object"
         assert "properties" in profile_props["phoneNumbers[]"]
 
-        # orders is inferred as "object" type at the top level
+        # orders is now a proper array of objects at the top level
         assert "orders" in properties
-        assert properties["orders"]["type"] == "object"
+        assert properties["orders"]["type"] == "array"
+        assert properties["orders"]["items"] == {"type": "object"}
 
         # Test examples are included
         assert "examples" in properties["userId"]
@@ -334,24 +336,17 @@ class TestSchemaGenerators:
         assert "profile_isEmployed" in profile_field_dict
         assert profile_field_dict["profile_isEmployed"]["type"] == "boolean"
 
-        # profile.address is a leaf field in the profile group (type=object -> "record")
-        # It does NOT become a nested record with sub-fields because it is treated as a
-        # leaf (it has a None remaining path). Invalid Avro types like "record" and "union"
-        # fall back to "string" to produce a valid schema.
-        assert "profile_address" in profile_field_dict
-        assert profile_field_dict["profile_address"]["type"] == "string"
+        # profile.address is now a proper nested record keyed as "address"
+        # with sub-fields for street, city, zipCode, coordinates, etc.
+        assert "address" in profile_field_dict
+        address_field = profile_field_dict["address"]
+        assert address_field["type"]["type"] == "record"
+        assert address_field["type"]["name"] == "address_record"
 
-        # Array fields are inferred as their element type, not as arrays.
-        # profile.tags -> type="string", profile.scores -> type="int",
-        # profile.ratings -> type="float" (mapped to "double" in Avro)
-        assert "profile_tags" in profile_field_dict
-        assert profile_field_dict["profile_tags"]["type"] == "string"
-
-        assert "profile_scores" in profile_field_dict
-        assert profile_field_dict["profile_scores"]["type"] == "int"
-
-        assert "profile_ratings" in profile_field_dict
-        assert profile_field_dict["profile_ratings"]["type"] == "double"
+        # Array fields now properly typed
+        assert profile_field_dict["profile_tags"]["type"] == {"type": "array", "items": "string"}
+        assert profile_field_dict["profile_scores"]["type"] == {"type": "array", "items": "int"}
+        assert profile_field_dict["profile_ratings"]["type"] == {"type": "array", "items": "double"}
 
         # Test nullable fields - lastLogin is nullable<string> -> ["null", "string"]
         assert "lastLogin" in field_dict
@@ -507,43 +502,46 @@ class TestSchemaGenerators:
 
         array_schema = self.inferrer.infer_schema(array_data, "array_test")
 
-        # The inferrer flattens arrays to their most common element type.
-        # string_array -> type="string", number_array -> type="int" (2 ints vs 1 float),
-        # boolean_array -> type="boolean", object_array -> type="object"
-        # These are NOT inferred with array=True, so they appear as plain types.
+        # The generators now correctly produce proper array types for arrays.
+        # string_array -> type="array" with items, number_array -> type="array" with items,
+        # boolean_array -> type="array" with items, object_array -> type="object"
 
-        # JSON Schema
+        # JSON Schema - arrays now have proper array types
         json_schema_str = self.json_generator.generate(array_schema)
         json_schema = json.loads(json_schema_str)
 
-        assert json_schema["properties"]["string_array"]["type"] == "string"
-        assert json_schema["properties"]["number_array"]["type"] == "integer"
-        assert json_schema["properties"]["boolean_array"]["type"] == "boolean"
-        assert json_schema["properties"]["object_array"]["type"] == "object"
+        assert json_schema["properties"]["string_array"]["type"] == "array"
+        assert json_schema["properties"]["string_array"]["items"] == {"type": "string"}
+        assert json_schema["properties"]["number_array"]["type"] == "array"
+        assert json_schema["properties"]["number_array"]["items"] == {"type": "integer"}
+        assert json_schema["properties"]["boolean_array"]["type"] == "array"
+        assert json_schema["properties"]["boolean_array"]["items"] == {"type": "boolean"}
+        assert json_schema["properties"]["object_array"]["type"] == "array"
+        assert json_schema["properties"]["object_array"]["items"] == {"type": "object"}
 
         # object_array children are represented with [] notation
         assert "object_array[]" in json_schema["properties"]
         assert json_schema["properties"]["object_array[]"]["type"] == "object"
         assert "properties" in json_schema["properties"]["object_array[]"]
 
-        # Avro - same flattening: string_array -> "string", etc.
+        # Avro - arrays now have proper array types
         avro_schema_str = self.avro_generator.generate(array_schema)
         avro_schema = json.loads(avro_schema_str)
 
         string_array_field = next(f for f in avro_schema["fields"] if f["name"] == "string_array")
-        assert string_array_field["type"] == "string"
+        assert string_array_field["type"] == {"type": "array", "items": "string"}
 
         number_array_field = next(f for f in avro_schema["fields"] if f["name"] == "number_array")
-        assert number_array_field["type"] == "int"
+        assert number_array_field["type"] == {"type": "array", "items": "int"}
 
         boolean_array_field = next(f for f in avro_schema["fields"] if f["name"] == "boolean_array")
-        assert boolean_array_field["type"] == "boolean"
+        assert boolean_array_field["type"] == {"type": "array", "items": "boolean"}
 
-        # Protobuf - flattened types: string, int32, bool
+        # Protobuf - arrays now use the repeated keyword
         protobuf_schema_str = self.protobuf_generator.generate(array_schema)
-        assert 'string string_array =' in protobuf_schema_str
-        assert 'int32 number_array =' in protobuf_schema_str
-        assert 'bool boolean_array =' in protobuf_schema_str
+        assert 'repeated string string_array =' in protobuf_schema_str
+        assert 'repeated int32 number_array =' in protobuf_schema_str
+        assert 'repeated bool boolean_array =' in protobuf_schema_str
     
     def test_deep_nesting(self):
         """Test deep nesting capabilities."""
@@ -578,14 +576,11 @@ class TestSchemaGenerators:
         assert level1["type"] == "object"
         assert "properties" in level1
 
-        # However, level2 is a leaf field in the level1 group because
-        # "level1.level2" exists as a direct field (with remaining_path=None).
-        # The generator treats it as a leaf, so it only gets type="object"
-        # without nested "properties".
+        # level2 is now a proper nested object with properties containing level3, etc.
         level2 = level1["properties"]["level2"]
         assert level2["type"] == "object"
-        # level2 is a leaf - it has description and examples but no nested properties
-        assert "description" in level2
+        assert "properties" in level2
+        assert "level3" in level2["properties"]
     
     def test_schema_validation(self):
         """Test that generated schemas are valid."""

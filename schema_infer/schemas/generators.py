@@ -134,24 +134,27 @@ class AvroGenerator(BaseSchemaGenerator):
             groups[first_part].append((remaining_path, field))
         
         for field_name, field_list in groups.items():
-            if any(path is None for path, _ in field_list):
-                # This is a leaf field
-                leaf_field = next(field for path, field in field_list if path is None)
+            leaf_entries = [(path, field) for path, field in field_list if path is None]
+            nested_entries = [(path, field) for path, field in field_list if path is not None]
+
+            if leaf_entries and not nested_entries:
+                # Pure leaf field - no children
+                leaf_field = leaf_entries[0][1]
                 avro_field = self._convert_field_to_avro(leaf_field)
                 avro_fields.append(avro_field)
-            else:
-                # This is a nested record
+            elif nested_entries:
+                # Has children - create a nested record (ignore leaf if it exists)
                 nested_record = {
                     "name": self._sanitize_avro_name(field_name),
                     "type": {
                         "type": "record",
                         "name": self._sanitize_avro_name(f"{field_name}_record"),
-                        "fields": self._build_nested_avro_record_fields(field_list)
+                        "fields": self._build_nested_avro_record_fields(nested_entries)
                     },
                     "doc": f"Nested record for {field_name}"
                 }
                 avro_fields.append(nested_record)
-        
+
         return avro_fields
     
     def _convert_field_to_avro(self, field: SchemaField) -> Dict[str, Any]:
@@ -482,23 +485,24 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
             groups[first_part].append((remaining_path, field))
         
         for field_name, field_list in groups.items():
-            if any(path is None for path, _ in field_list):
-                # This is a leaf field
-                leaf_field = next(field for path, field in field_list if path is None)
+            leaf_entries = [(path, field) for path, field in field_list if path is None]
+            nested_entries = [(path, field) for path, field in field_list if path is not None]
+
+            if leaf_entries and not nested_entries:
+                # Pure leaf field
+                leaf_field = leaf_entries[0][1]
                 property_schema = self._convert_field_to_json_schema(leaf_field)
                 properties[field_name] = property_schema
                 if leaf_field.required:
                     required.append(field_name)
-            else:
-                # This is a nested object
+            elif nested_entries:
+                # Has children - create nested object (ignore leaf if exists)
                 properties[field_name] = {
                     "type": "object",
                     "properties": {},
                     "required": []
                 }
-                
-                # Recursively build nested structure
-                nested_props = self._build_nested_structure(field_list)
+                nested_props = self._build_nested_structure(nested_entries)
                 properties[field_name]["properties"] = nested_props["properties"]
                 properties[field_name]["required"] = nested_props["required"]
         

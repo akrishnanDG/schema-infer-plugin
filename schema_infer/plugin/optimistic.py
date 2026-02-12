@@ -67,6 +67,7 @@ class OptimisticProcessor:
         consumer_config.setdefault('log_level', '7')
         consumer_config.setdefault('log.connection.close', 'false')
         consumer_config.setdefault('log.thread.name', 'false')
+        consumer_config.setdefault('broker.address.family', 'v4')
         consumer_config.setdefault('log.queue', 'false')
         consumer_config.setdefault('statistics.interval.ms', '0')
         consumer_config.setdefault('enable.partition.eof', 'false')
@@ -87,6 +88,7 @@ class OptimisticProcessor:
                     'log_level': '7',
                     'log.connection.close': 'false',
                     'log.thread.name': 'false',
+                    'broker.address.family': 'v4',
                     'log.queue': 'false',
                     'statistics.interval.ms': '0',
                     'enable.auto.commit': 'false',
@@ -255,21 +257,22 @@ class OptimisticProcessor:
                 'enable.auto.commit': False,
                 'session.timeout.ms': 3000,  # Shorter timeout
                 'heartbeat.interval.ms': 1000,
+                'broker.address.family': 'v4',
                 'log_level': '7',  # Suppress logs
             }
-            
+
             # Get authentication configuration
             from ..plugin.auth import AuthenticationManager
             auth_manager = AuthenticationManager(self.config)
             auth_config = auth_manager.configure_kafka_auth()
             consumer_config.update(auth_config)
-            
+
             consumer = self._create_consumer(consumer_config)
-            
+
             try:
                 # Subscribe to topic
                 consumer.subscribe([topic_name])
-                
+
                 # Try to get one message with very short timeout
                 start_time = time.time()
                 while time.time() - start_time < 3:  # 3 second max
@@ -312,17 +315,18 @@ class OptimisticProcessor:
                 'enable.auto.commit': False,
                 'session.timeout.ms': 3000,  # Shorter timeout
                 'heartbeat.interval.ms': 1000,
+                'broker.address.family': 'v4',
                 'log_level': '7',  # Suppress logs
             }
-            
+
             # Get authentication configuration
             from ..plugin.auth import AuthenticationManager
             auth_manager = AuthenticationManager(self.config)
             auth_config = auth_manager.configure_kafka_auth()
             consumer_config.update(auth_config)
-            
+
             consumer = self._create_consumer(consumer_config)
-            
+
             try:
                 # Get topic metadata first
                 metadata = consumer.list_topics(topic_name, timeout=3.0)
@@ -583,6 +587,7 @@ class OptimisticProcessor:
                 'enable.partition.eof': 'false',  # Disable EOF telemetry
                 'log.connection.close': 'false',  # Disable connection close logs
                 'log.thread.name': 'false',  # Disable thread name logs
+                'broker.address.family': 'v4',  # Skip IPv6 attempts
                 'log.queue': 'false',  # Disable queue logs
                 # Aggressive batch settings for maximum speed
                 'fetch.max.bytes': 104857600,  # 100MB fetch size (doubled for speed)
@@ -859,6 +864,7 @@ class OptimisticProcessor:
             'log_level': '7',
             'log.connection.close': 'false',
             'log.thread.name': 'false',
+            'broker.address.family': 'v4',
             'log.queue': 'false',
             'statistics.interval.ms': '0',  # Disable statistics to reduce telemetry
             # Aggressive batch settings for maximum speed

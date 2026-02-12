@@ -242,7 +242,7 @@ class SchemaInferrer:
             else:
                 # Determine value type
                 value_type = self._get_value_type(value, depth)
-                analysis["types"][value_type.name] += 1
+                analysis["types"][str(value_type)] += 1
                 analysis["values"].append(value)
                 
                 # Collect examples (limit to 5)
@@ -380,7 +380,14 @@ class SchemaInferrer:
                 else:
                     type_name = "union"
             
-            field_type = FieldType(type_name, nullable=nullable)
+            # Parse array type wrapper
+            is_array = False
+            base_type_name = type_name
+            if type_name.startswith("array<") and type_name.endswith(">"):
+                is_array = True
+                base_type_name = type_name[6:-1]  # Extract inner type
+
+            field_type = FieldType(base_type_name, nullable=nullable, array=is_array)
         
         # Determine if field is required
         required = null_count == 0 or (null_count / total_count) < 0.1

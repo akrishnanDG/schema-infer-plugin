@@ -43,6 +43,7 @@ class KafkaConsumer:
                 "log_level": "7",  # Only show critical messages
                 "log.connection.close": "false",
                 "log.thread.name": "false",
+                "broker.address.family": "v4",
             }
             
             # Get authentication configuration from authentication manager
