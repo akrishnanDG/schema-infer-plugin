@@ -337,7 +337,7 @@ class TestSchemaGenerators:
         assert "address" in profile_field_dict
         address_field = profile_field_dict["address"]
         assert address_field["type"]["type"] == "record"
-        assert address_field["type"]["name"] == "comprehensive_test_address_record"
+        assert address_field["type"]["name"] == "comprehensive_test_profile_address_record"
 
         # Array fields now properly typed
         assert profile_field_dict["profile_tags"]["type"] == {"type": "array", "items": "string"}

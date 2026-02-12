@@ -124,7 +124,7 @@ class AvroGenerator(BaseSchemaGenerator):
                     "type": {
                         "type": "record",
                         "name": self._sanitize_avro_name(f"{self._record_prefix}_{top_level}_record"),
-                        "fields": self._build_nested_avro_record_fields(nested_list)
+                        "fields": self._build_nested_avro_record_fields(nested_list, top_level)
                     },
                     "doc": f"Nested record for {top_level}"
                 }
@@ -135,14 +135,14 @@ class AvroGenerator(BaseSchemaGenerator):
                         f["type"] = {
                             "type": "record",
                             "name": self._sanitize_avro_name(f"{self._record_prefix}_{top_level}_record"),
-                            "fields": self._build_nested_avro_record_fields(nested_list)
+                            "fields": self._build_nested_avro_record_fields(nested_list, top_level)
                         }
                         break
 
         # Add remaining array child groups without parent
         for array_parent, children in array_child_fields.items():
             if array_parent not in top_level_fields and children:
-                item_fields = self._build_nested_avro_record_fields(children)
+                item_fields = self._build_nested_avro_record_fields(children, array_parent)
                 avro_fields.append({
                     "name": self._sanitize_avro_name(array_parent),
                     "type": {
@@ -158,38 +158,38 @@ class AvroGenerator(BaseSchemaGenerator):
 
         return avro_fields
     
-    def _build_nested_avro_record_fields(self, nested_fields: List[tuple]) -> List[Dict[str, Any]]:
+    def _build_nested_avro_record_fields(self, nested_fields: List[tuple], parent_path: str = "") -> List[Dict[str, Any]]:
         """Build nested record fields from field paths."""
         avro_fields = []
-        
+
         # Group by first part of path
         groups = {}
         for path, field in nested_fields:
             parts = path.split('.')
             first_part = parts[0]
             remaining_path = '.'.join(parts[1:]) if len(parts) > 1 else None
-            
+
             if first_part not in groups:
                 groups[first_part] = []
             groups[first_part].append((remaining_path, field))
-        
+
         for field_name, field_list in groups.items():
             leaf_entries = [(path, field) for path, field in field_list if path is None]
             nested_entries = [(path, field) for path, field in field_list if path is not None]
+            # Build a unique path for this level to avoid Avro name collisions
+            full_path = f"{parent_path}_{field_name}" if parent_path else field_name
 
             if leaf_entries and not nested_entries:
-                # Pure leaf field - no children
                 leaf_field = leaf_entries[0][1]
                 avro_field = self._convert_field_to_avro(leaf_field)
                 avro_fields.append(avro_field)
             elif nested_entries:
-                # Has children - create a nested record (ignore leaf if it exists)
                 nested_record = {
                     "name": self._sanitize_avro_name(field_name),
                     "type": {
                         "type": "record",
-                        "name": self._sanitize_avro_name(f"{self._record_prefix}_{field_name}_record"),
-                        "fields": self._build_nested_avro_record_fields(nested_entries)
+                        "name": self._sanitize_avro_name(f"{self._record_prefix}_{full_path}_record"),
+                        "fields": self._build_nested_avro_record_fields(nested_entries, full_path)
                     },
                     "doc": f"Nested record for {field_name}"
                 }
