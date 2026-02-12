@@ -254,7 +254,6 @@ kafka:
 
 schema_registry:
   url: "https://schemaregistry:8081"
-  verify_ssl: false
   compatibility: "BACKWARD"
 
 topic_filter:
@@ -387,7 +386,6 @@ schema_registry:
   url: "https://psrc-xxxxx.us-west-2.aws.schema-infer.cloud"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
-  verify_ssl: true
   compatibility: "BACKWARD"
 
 performance:
@@ -421,7 +419,6 @@ kafka:
 
 schema_registry:
   url: "http://dev-registry:8081"
-  verify_ssl: false
 
 inference:
   max_messages: 100
@@ -444,7 +441,6 @@ kafka:
 
 schema_registry:
   url: "https://prod-registry:8081"
-  verify_ssl: true
   compatibility: "FULL"
 
 inference:
@@ -659,7 +655,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-        python install-plugin.py
+        pip install -e .
     
     - name: Generate schemas
       run: |
@@ -700,7 +696,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY . .
-RUN python install-plugin.py
+RUN pip install -e .
 
 COPY config/ /app/config/
 
@@ -740,7 +736,7 @@ spec:
     spec:
       containers:
       - name: schema-generator
-        image: schema-infer-schema-infer:latest
+        image: schema-infer:latest
         command:
         - schema-infer
         - schema
@@ -844,8 +840,7 @@ kafka:
 
 schema_registry:
   url: "http://localhost:8081"
-  verify_ssl: false
-  compatibility: "NONE"
+  compatibility: "BACKWARD"
 
 performance:
   verbose_logging: true

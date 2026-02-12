@@ -104,7 +104,7 @@ The **Schema Inference Schema Inference Plugin** is a powerful CLI tool that aut
 
 ### Prerequisites
 
-- **Python 3.8+**: Required for running the plugin
+- **Python 3.9+**: Required for running the plugin
 - **Schema Inference CLI**: Required for plugin integration
 - **Kafka Access**: Access to Kafka cluster (Schema Inference Cloud or Platform)
 - **Schema Registry Access**: Optional, for schema registration
@@ -117,7 +117,7 @@ git clone https://github.com/schema-inferinc/schema-infer-plugin.git
 cd schema-infer-plugin
 
 # Install the plugin
-python3 install-plugin.py
+pip install -e .
 
 # Verify installation
 schema-infer --help
@@ -141,10 +141,10 @@ schema-infer --help
 
 ```bash
 # Build Docker image
-docker build -t schema-infer-schema-infer .
+docker build -t schema-infer .
 
 # Run with Docker
-docker run -v $(pwd)/config:/app/config schema-infer-schema-infer \
+docker run -v $(pwd)/config:/app/config schema-infer \
   --config /app/config/schema-infer.yaml infer --topic my-topic
 ```
 
@@ -211,9 +211,8 @@ kafka:
 # Schema Registry Configuration
 schema_registry:
   url: "http://localhost:8081"
-  verify_ssl: true
   auth: null
-  compatibility: "NONE"
+  compatibility: "BACKWARD"
   subject_name_strategy: "TopicNameStrategy"
   
   # Schema Inference Cloud Authentication
@@ -270,7 +269,6 @@ schema_registry:
   url: "https://psrc-xxxxx.us-west-2.aws.schema-infer.cloud"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
-  verify_ssl: true
 ```
 
 #### Schema Inference Platform Configuration
@@ -285,7 +283,6 @@ kafka:
 
 schema_registry:
   url: "https://schemaregistry:8081"
-  verify_ssl: false
 ```
 
 ---
@@ -778,7 +775,6 @@ Error: Schema Registry connection failed
 ```yaml
 schema_registry:
   url: "https://correct-registry-url"
-  verify_ssl: true
   cloud_api_key: "correct-api-key"
   cloud_api_secret: "correct-api-secret"
 ```
@@ -878,9 +874,8 @@ class KafkaConfig(BaseModel):
 ```python
 class SchemaRegistryConfig(BaseModel):
     url: str
-    verify_ssl: bool = True
     auth: Optional[Dict[str, str]] = None
-    compatibility: str = "NONE"
+    compatibility: str = "BACKWARD"
     subject_name_strategy: str = "TopicNameStrategy"
     cloud_api_key: Optional[str] = None
     cloud_api_secret: Optional[str] = None
@@ -1148,7 +1143,7 @@ inference:
 - Limited parallel processing for single large topics
 
 #### 4. **Platform Support**
-- Requires Python 3.8+
+- Requires Python 3.9+
 - Limited Windows support
 - No native mobile support
 
@@ -1210,7 +1205,7 @@ performance:
 #### 2. **Community Support**
 - GitHub Issues: Report bugs and request features
 - GitHub Discussions: Ask questions and share experiences
-- Stack Overflow: Tag questions with `schema-infer-schema-infer`
+- Stack Overflow: Tag questions with `schema-infer`
 
 #### 3. **Professional Support**
 - Schema Inference Support: For enterprise customers

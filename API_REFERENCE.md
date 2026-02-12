@@ -1,6 +1,6 @@
 # API Reference
 
-Complete API reference for the Schema Inference Schema Inference Plugin.
+Complete API reference for the Schema Inference Plugin.
 
 ## Table of Contents
 
@@ -173,9 +173,11 @@ kafka:
 ```yaml
 schema_registry:
   url: string                                  # Required: Schema Registry URL
-  verify_ssl: boolean                          # Default: true
+  ssl_ca_location: string                      # Optional: CA certificate path
+  ssl_certificate_location: string             # Optional: Client certificate path
+  ssl_key_location: string                     # Optional: Client key path
   auth: object                                 # Optional: Authentication config
-  compatibility: string                        # Default: "NONE"
+  compatibility: string                        # Default: "BACKWARD"
   subject_name_strategy: string                # Default: "TopicNameStrategy"
   cloud_api_key: string                        # Optional: Schema Inference Cloud API key
   cloud_api_secret: string                     # Optional: Schema Inference Cloud API secret
@@ -780,8 +782,7 @@ config.kafka = KafkaConfig(
     sasl_password="secret"
 )
 config.schema_registry = SchemaRegistryConfig(
-    url="http://localhost:8081",
-    verify_ssl=False
+    url="http://localhost:8081"
 )
 
 # Use configuration
@@ -812,4 +813,4 @@ except SchemaInferenceError as e:
 
 ---
 
-This API reference provides comprehensive documentation for all classes, methods, and configuration options available in the Schema Inference Schema Inference Plugin. For more detailed examples and usage patterns, see the [DOCUMENTATION.md](DOCUMENTATION.md) file.
+This API reference provides comprehensive documentation for all classes, methods, and configuration options available in the Schema Inference Plugin. For more detailed examples and usage patterns, see the [DOCUMENTATION.md](DOCUMENTATION.md) file.

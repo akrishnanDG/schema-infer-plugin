@@ -5,8 +5,10 @@ Get up and running with the Schema Inference Plugin in minutes.
 ## 🚀 Installation
 
 ```bash
-# Install the plugin
-python3 install-plugin.py
+# Clone and install the plugin
+git clone https://github.com/akrishnanDG/schema-infer-plugin.git
+cd schema-infer-plugin
+pip install -e .
 
 # Verify installation
 schema-infer --help
@@ -121,7 +123,6 @@ kafka:
 
 schema_registry:
   url: "https://schemaregistry:8081"
-  verify_ssl: false
 ```
 
 ### 2. Run with Platform Config

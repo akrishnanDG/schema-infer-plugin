@@ -10,12 +10,12 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 ## 🚀 Features
 
 - **🎯 Multi-Format Schema Generation**: JSON Schema, Avro, and Protobuf
-- **🔍 Intelligent Data Analysis**: Automatic format detection and deep nested analysis
+- **🔍 Intelligent Data Analysis**: Automatic format detection, datetime/enum inference, and deep nested analysis
 - **⚡ High Performance**: Parallel processing and optimized message reading
 - **🎛️ Flexible Topic Discovery**: Single topics, multiple topics, prefix/pattern matching
 - **🔐 Enterprise Security**: Full Schema Inference Cloud and Platform authentication support
 - **📊 Schema Registry Integration**: Automatic registration with compatibility management
-- **🛡️ Production Ready**: Robust error handling and comprehensive logging
+- **🛡️ Production Ready**: Schema validation, retry logic, and comprehensive error handling
 
 ## 📖 Documentation
 
@@ -89,6 +89,13 @@ performance:
 - **CSV**: Comma-separated values with header detection
 - **Key-Value**: Space or equals-separated key-value pairs
 - **Raw Text**: Fallback for unrecognized formats
+
+### Intelligent Type Detection
+- **Datetime**: ISO 8601 timestamps detected and annotated with `format: "date-time"`
+- **Date**: Date strings detected and annotated with `format: "date"`
+- **Enum**: Low-cardinality string fields automatically identified as enums
+- **Arrays**: Proper array types with item schemas (e.g., `array<string>`, `array<object>`)
+- **Nested Objects**: Deep nesting preserved in all output formats
 
 ### Output Schema Formats
 - **JSON Schema**: Industry-standard JSON Schema (Draft 7)
