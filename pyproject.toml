@@ -3,16 +3,16 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "schema-infer-plugin"
-version = "0.1.0"
-description = "CLI plugin for inferring schemas from Kafka topics"
+name = "schema-infer"
+version = "1.3.0"
+description = "Automatically infer and generate schemas from Kafka topic data"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "Schema Inference Plugin", email = "schema-infer@example.com"},
+    {name = "Arun Krishnan"},
 ]
-keywords = ["kafka", "schema", "avro", "protobuf", "json-schema"]
+keywords = ["kafka", "schema", "avro", "protobuf", "json-schema", "confluent", "schema-registry", "inference"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Networking",
 ]
@@ -52,10 +53,10 @@ dev = [
 schema-infer = "schema_infer.plugin.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/schema-inferinc/schema-infer-plugin"
-Repository = "https://github.com/schema-inferinc/schema-infer-plugin"
-Documentation = "https://docs.schema-infer.io/schema-infer"
-"Bug Tracker" = "https://github.com/schema-inferinc/schema-infer-plugin/issues"
+Homepage = "https://github.com/akrishnanDG/schema-infer-plugin"
+Repository = "https://github.com/akrishnanDG/schema-infer-plugin"
+Documentation = "https://github.com/akrishnanDG/schema-infer-plugin/blob/main/DOCUMENTATION.md"
+"Bug Tracker" = "https://github.com/akrishnanDG/schema-infer-plugin/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

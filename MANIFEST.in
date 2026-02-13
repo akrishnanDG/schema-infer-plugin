@@ -1,0 +1,13 @@
+include README.md
+include DOCUMENTATION.md
+include EXAMPLES.md
+include QUICK_START.md
+include API_REFERENCE.md
+include LICENSE
+recursive-include schema_infer *.py
+exclude test_*.py
+exclude run_*.sh
+exclude test-*.yaml
+prune cc-live-schemas
+prune test-live-schemas
+prune scale-test-schemas

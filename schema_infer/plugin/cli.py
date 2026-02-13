@@ -24,8 +24,8 @@ from ..plugin.optimistic import OptimisticProcessor, SuppressTelemetry
 from ..utils.logger import setup_logging
 
 # Plugin version information
-PLUGIN_VERSION = "1.2.0"
-PLUGIN_BUILD = "2025-10-12-10:55:00"
+PLUGIN_VERSION = "1.3.0"
+PLUGIN_BUILD = "2026-02-13"
 
 
 @click.group()

@@ -81,3 +81,20 @@ tmp/
 
 # Type checking
 .mypy_cache/
+
+# Test configs with secrets
+test-cc-*.yaml
+test-live-*.yaml
+test-scale-*.yaml
+test-cc-batch.yaml
+
+# Test output directories
+cc-live-schemas/
+test-live-schemas/
+scale-test-schemas/
+
+# Test scripts
+test_producer.py
+test_scale.py
+run_live_test.sh
+run_scale_test.sh
