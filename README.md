@@ -35,6 +35,7 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 ### Prerequisites
 
 - Python 3.9+
+- pip (included with Python; if missing, run `python3 -m ensurepip --upgrade`)
 - Access to a Kafka cluster
 
 ### Installation

@@ -2,6 +2,11 @@
 
 Get up and running with the Schema Inference Plugin in minutes.
 
+## 🚀 Prerequisites
+
+- Python 3.9+
+- pip (included with Python; if missing, run `python3 -m ensurepip --upgrade`)
+
 ## 🚀 Installation
 
 ```bash

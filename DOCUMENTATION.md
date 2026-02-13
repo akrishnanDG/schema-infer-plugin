@@ -105,8 +105,8 @@ The **Schema Inference Plugin** is a powerful CLI tool that automatically infers
 ### Prerequisites
 
 - **Python 3.9+**: Required for running the plugin
-- **Schema Inference CLI**: Required for plugin integration
-- **Kafka Access**: Access to Kafka cluster (Schema Inference Cloud or Platform)
+- **pip**: Included with Python; if missing, run `python3 -m ensurepip --upgrade`
+- **Kafka Access**: Access to Kafka cluster (Confluent Cloud, Confluent Platform, or any Kafka cluster)
 - **Schema Registry Access**: Optional, for schema registration
 
 ### Quick Installation
