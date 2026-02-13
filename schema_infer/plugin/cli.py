@@ -1120,5 +1120,214 @@ def watch(
         click.echo(f"\n\nWatch stopped. Processed {len(processed_topics)} topics total.")
 
 
+@main.command()
+@click.option(
+    "--topic",
+    "-t",
+    help="Single topic name to monitor",
+)
+@click.option(
+    "--topics",
+    help="Comma-separated list of topic names",
+)
+@click.option(
+    "--topic-prefix",
+    help="Prefix to match multiple topics",
+)
+@click.option(
+    "--topic-pattern",
+    help="Regex pattern to match topics",
+)
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["avro", "protobuf", "json-schema"]),
+    default="avro",
+    help="Output schema format (default: avro)",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output directory for schema files",
+)
+@click.option(
+    "--register",
+    is_flag=True,
+    help="Register/update schemas in Schema Registry",
+)
+@click.option(
+    "--context",
+    help="Schema Registry context for subject name prefixing",
+)
+@click.option(
+    "--consumer-group",
+    default=None,
+    help="Consumer group ID (default: from config or 'schema-infer-live')",
+)
+@click.option(
+    "--batch-size",
+    type=int,
+    default=None,
+    help="Messages per batch before re-inferring (default: 100)",
+)
+@click.option(
+    "--batch-timeout",
+    type=float,
+    default=None,
+    help="Seconds to wait for batch (default: 30.0)",
+)
+@click.option(
+    "--state-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="State persistence directory (default: ~/.schema-infer/state/)",
+)
+@click.option(
+    "--no-persist-state",
+    is_flag=True,
+    help="Disable state persistence",
+)
+@click.option(
+    "--exclude-internal",
+    is_flag=True,
+    default=True,
+    help="Exclude internal topics (default: True)",
+)
+@click.option(
+    "--data-format",
+    type=click.Choice(["json", "csv", "key-value", "auto"]),
+    default="auto",
+    help="Force specific data format detection (default: auto)",
+)
+@click.option(
+    "--on-incompatible",
+    type=click.Choice(["skip", "log", "force", "fail"]),
+    default=None,
+    help="Behavior when schema is incompatible (default: skip)",
+)
+@click.pass_context
+def live(
+    ctx: click.Context,
+    topic: Optional[str],
+    topics: Optional[str],
+    topic_prefix: Optional[str],
+    topic_pattern: Optional[str],
+    format: str,
+    output_dir: Optional[Path],
+    register: bool,
+    context: Optional[str],
+    consumer_group: Optional[str],
+    batch_size: Optional[int],
+    batch_timeout: Optional[float],
+    state_dir: Optional[Path],
+    no_persist_state: bool,
+    exclude_internal: bool,
+    data_format: str,
+    on_incompatible: Optional[str],
+) -> None:
+    """
+    Continuously consume Kafka topics and update schemas as data evolves.
+
+    Unlike 'infer' (which samples once and exits) and 'watch' (which only
+    detects new topics), 'live' continuously reads new messages from specified
+    topics, incrementally builds schemas, detects schema evolution, and
+    re-registers updated schemas to Schema Registry.
+
+    Consumer offsets are tracked via Kafka consumer groups, so the command
+    can resume from where it left off after restart.
+
+    \b
+    EXAMPLES:
+
+    \b
+    # Monitor a single topic and register Avro schemas
+    schema-infer --config config.yaml live --topic orders --register
+
+    \b
+    # Monitor multiple topics with custom batch settings
+    schema-infer --config config.yaml live \\
+      --topics "orders,payments,users" \\
+      --register --format avro \\
+      --batch-size 200 --batch-timeout 60
+
+    \b
+    # Monitor topics by pattern with output to files
+    schema-infer --config config.yaml live \\
+      --topic-pattern "^prod-.*" \\
+      --output-dir ./schemas --register
+
+    \b
+    # Force registration on incompatible changes
+    schema-infer --config config.yaml live \\
+      --topic orders --register --on-incompatible force
+    """
+
+    config = ctx.obj["config"]
+
+    # Override persist_state if --no-persist-state is set
+    if no_persist_state:
+        config.live.persist_state = False
+
+    # Apply CLI overrides to live config
+    effective_consumer_group = consumer_group or config.live.consumer_group
+    effective_batch_size = batch_size if batch_size is not None else config.live.batch_size
+    effective_batch_timeout = batch_timeout if batch_timeout is not None else config.live.batch_timeout_seconds
+    effective_on_incompatible = on_incompatible or config.live.on_incompatible
+
+    # Validate input
+    if not any([topic, topics, topic_prefix, topic_pattern]):
+        click.echo(
+            "Error: Must specify either --topic, --topics, --topic-prefix, or --topic-pattern",
+            err=True,
+        )
+        sys.exit(1)
+
+    if not register and not output_dir:
+        click.echo(
+            "Error: Must specify either --register or --output-dir (or both)",
+            err=True,
+        )
+        sys.exit(1)
+
+    # Discover topics to process
+    discovery = TopicDiscovery(config)
+    topic_list = discovery.discover_topics(
+        topic=topic,
+        topics=topics,
+        topic_prefix=topic_prefix,
+        topic_pattern=topic_pattern,
+        exclude_internal=exclude_internal,
+    )
+
+    if not topic_list:
+        click.echo("Error: No topics found matching the specified criteria", err=True)
+        sys.exit(1)
+
+    # Configure inference settings
+    config.auto_detect_format = data_format == "auto"
+    config.forced_data_format = data_format if data_format != "auto" else None
+
+    # Create and run the orchestrator
+    from ..plugin.live import LiveModeOrchestrator
+
+    orchestrator = LiveModeOrchestrator(
+        config=config,
+        topics=topic_list,
+        schema_format=format,
+        register=register,
+        output_dir=output_dir,
+        state_dir=state_dir,
+        batch_size=effective_batch_size,
+        batch_timeout=effective_batch_timeout,
+        consumer_group=effective_consumer_group,
+        context=context,
+        on_incompatible=effective_on_incompatible,
+        data_format=data_format,
+    )
+
+    orchestrator.run()
+
+
 if __name__ == "__main__":
     main()

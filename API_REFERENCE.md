@@ -127,6 +127,51 @@ schema-infer validate-topics --topics "user-events,order-events"
 schema-infer validate-topics --topics "user-events" --check-connectivity --check-schema-registry
 ```
 
+### `live` Command
+
+Continuously consume Kafka topics and update schemas as data evolves.
+
+```bash
+schema-infer live [OPTIONS]
+```
+
+#### Options
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `--topic / -t` | String | Single topic name | None |
+| `--topics` | String | Comma-separated topic list | None |
+| `--topic-prefix` | String | Match topics by prefix | None |
+| `--topic-pattern` | String | Match topics by regex | None |
+| `--format / -f` | Choice | Schema format: avro, protobuf, json-schema | `avro` |
+| `--output-dir` | Path | Directory for schema files | None |
+| `--register` | Flag | Register/update schemas in Schema Registry | off |
+| `--context` | String | Schema Registry context prefix | None |
+| `--consumer-group` | String | Consumer group ID for offset tracking | `schema-infer-live` |
+| `--batch-size` | Integer | Messages per batch before re-inferring | `100` (auto-scales) |
+| `--batch-timeout` | Float | Seconds to wait for a batch | `30.0` |
+| `--state-dir` | Path | State persistence directory | `~/.schema-infer/state/` |
+| `--no-persist-state` | Flag | Disable state persistence | off |
+| `--data-format` | Choice | Force data format: json, csv, key-value, auto | `auto` |
+| `--on-incompatible` | Choice | Incompatible schema behavior: skip, log, force, fail | `skip` |
+| `--exclude-internal` | Flag | Exclude internal topics | on |
+
+#### Examples
+
+```bash
+# Monitor a single topic
+schema-infer --config config.yaml live --topic orders --register
+
+# Multiple topics with forced incompatibility handling
+schema-infer --config config.yaml live \
+  --topics "orders,payments" --register --on-incompatible force
+
+# Multi-instance scaling (run on multiple hosts)
+schema-infer --config config.yaml live \
+  --topic-pattern ".*" --register \
+  --consumer-group shared-group --state-dir /shared/state
+```
+
 ### `version` Command
 
 Show version and build information.
@@ -147,6 +192,7 @@ schema_registry: SchemaRegistryConfig
 inference: InferenceConfig
 performance: PerformanceConfig
 topic_filter: TopicFilterConfig
+live: LiveConfig
 ```
 
 ### KafkaConfig
@@ -217,6 +263,23 @@ topic_filter:
   exclude_internal: boolean                    # Default: true
   additional_exclude_prefixes: array           # Default: []
   include_patterns: array                      # Default: []
+```
+
+### LiveConfig
+
+```yaml
+live:
+  consumer_group: string                       # Default: "schema-infer-live"
+  batch_size: integer                          # Default: 100 (auto-scales with topic count)
+  batch_timeout_seconds: float                 # Default: 30.0
+  state_dir: string                            # Default: "~/.schema-infer/state"
+  persist_state: boolean                       # Default: true
+  initial_offset: string                       # Default: "latest" (earliest or latest)
+  min_records_before_register: integer         # Default: 10
+  on_incompatible: string                      # Default: "skip" (skip, log, force, fail)
+  idle_evict_seconds: integer                  # Default: 3600
+  max_concurrent_registrations: integer        # Default: 5
+  summary_interval_seconds: integer            # Default: 60
 ```
 
 ---

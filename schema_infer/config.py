@@ -128,15 +128,47 @@ class TopicFilterConfig(BaseModel):
     include_patterns: List[str] = Field(default_factory=list, description="Patterns to include (overrides exclusions)")
 
 
+class LiveConfig(BaseModel):
+    """Live consumer mode configuration."""
+
+    consumer_group: str = Field(default="schema-infer-live", description="Stable consumer group ID for offset tracking")
+    batch_size: int = Field(default=100, description="Number of messages to accumulate before re-inferring schema")
+    batch_timeout_seconds: float = Field(default=30.0, description="Maximum seconds to wait for batch_size messages before processing")
+    state_dir: Optional[str] = Field(default=None, description="Directory for persisting incremental schema state (default: ~/.schema-infer/state/)")
+    persist_state: bool = Field(default=True, description="Whether to persist schema state to disk for resume-on-restart")
+    initial_offset: str = Field(default="latest", description="Where to start consuming if no committed offsets exist (earliest/latest)")
+    min_records_before_register: int = Field(default=10, description="Minimum records to process before first schema registration")
+    idle_evict_seconds: int = Field(default=3600, description="Evict idle topic state from memory after this many seconds")
+    max_concurrent_registrations: int = Field(default=5, description="Max parallel schema registrations (rate-limiting)")
+    summary_interval_seconds: int = Field(default=60, description="Interval for periodic status summary (useful for many topics)")
+    on_incompatible: str = Field(default="skip", description="Behavior when schema is incompatible: skip, log, force, fail")
+
+    @field_validator('initial_offset')
+    @classmethod
+    def validate_initial_offset(cls, v):
+        if v not in ('earliest', 'latest'):
+            raise ValueError(f"initial_offset must be 'earliest' or 'latest', got '{v}'")
+        return v
+
+    @field_validator('on_incompatible')
+    @classmethod
+    def validate_on_incompatible(cls, v):
+        valid = {'skip', 'log', 'force', 'fail'}
+        if v not in valid:
+            raise ValueError(f"on_incompatible must be one of {valid}, got '{v}'")
+        return v
+
+
 class Config(BaseModel):
     """Main configuration class."""
-    
+
     kafka: KafkaConfig = Field(default_factory=KafkaConfig, description="Kafka configuration")
     schema_registry: SchemaRegistryConfig = Field(default_factory=SchemaRegistryConfig, description="Schema Registry configuration")
     inference: InferenceConfig = Field(default_factory=InferenceConfig, description="Inference configuration")
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig, description="Performance configuration")
     logging: LoggingConfig = Field(default_factory=LoggingConfig, description="Logging configuration")
     topic_filter: TopicFilterConfig = Field(default_factory=TopicFilterConfig, description="Topic filtering configuration")
+    live: LiveConfig = Field(default_factory=LiveConfig, description="Live consumer mode configuration")
     
     # Convenience properties for backward compatibility
     bootstrap_servers: str = Field(default="localhost:9092")
@@ -240,7 +272,7 @@ def load_config(config_path: Optional[Path] = None) -> Config:
                 raise ValueError(f"Unsupported config file format: {config_path.suffix}")
 
         # Validate top-level config keys
-        valid_sections = {"kafka", "schema_registry", "inference", "performance", "logging", "topic_filter",
+        valid_sections = {"kafka", "schema_registry", "inference", "performance", "logging", "topic_filter", "live",
                          "bootstrap_servers", "schema_registry_url", "log_level", "max_messages",
                          "timeout", "auto_detect_format", "forced_data_format", "background"}
         unknown_keys = set(config_data.keys()) - valid_sections
@@ -283,6 +315,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         config.logging = LoggingConfig(**merged_config["logging"])
     if "topic_filter" in merged_config:
         config.topic_filter = TopicFilterConfig(**merged_config["topic_filter"])
+    if "live" in merged_config:
+        config.live = LiveConfig(**merged_config["live"])
     
     # Update convenience properties
     if "bootstrap_servers" in merged_config:

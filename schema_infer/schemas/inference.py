@@ -199,6 +199,35 @@ class SchemaInferrer:
             namespace="com.schema-infer.schema.infer"
         )
     
+    def analyze_fields(self, parsed_data: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """
+        Analyze fields across all records.
+
+        Public API for use by incremental inference.
+
+        Args:
+            parsed_data: List of parsed data dictionaries
+
+        Returns:
+            Dictionary mapping field names to their analysis
+        """
+        return self._analyze_fields(parsed_data)
+
+    def create_schema_field(self, field_name: str, analysis: Dict[str, Any]) -> Optional[SchemaField]:
+        """
+        Create a schema field from analysis data.
+
+        Public API for use by incremental inference.
+
+        Args:
+            field_name: Name of the field
+            analysis: Field analysis data
+
+        Returns:
+            SchemaField or None if field should be excluded
+        """
+        return self._create_schema_field(field_name, analysis)
+
     def _analyze_fields(self, parsed_data: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """
         Analyze fields across all records.

@@ -36,3 +36,8 @@ class ConfigurationError(SchemaInferError):
 class InferenceError(SchemaInferError):
     """Schema inference errors."""
     pass
+
+
+class LiveModeError(SchemaInferError):
+    """Live consumer mode errors."""
+    pass
