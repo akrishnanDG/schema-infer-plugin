@@ -40,12 +40,13 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 ### Installation
 
 ```bash
-# Clone the repository
+# Install from source
+pip install git+https://github.com/akrishnanDG/schema-infer-plugin.git
+
+# Or clone and install locally
 git clone https://github.com/akrishnanDG/schema-infer-plugin.git
 cd schema-infer-plugin
-
-# Install the package and dependencies
-pip install -e .
+pip install .
 
 # Verify installation
 schema-infer --help

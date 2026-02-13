@@ -5,9 +5,15 @@ Get up and running with the Schema Inference Plugin in minutes.
 ## 🚀 Installation
 
 ```bash
-# Clone and install the plugin
+# Install directly from GitHub
+pip install git+https://github.com/akrishnanDG/schema-infer-plugin.git
+
+# Or clone and install locally
 git clone https://github.com/akrishnanDG/schema-infer-plugin.git
 cd schema-infer-plugin
+pip install .
+
+# For development (editable mode)
 pip install -e .
 
 # Verify installation

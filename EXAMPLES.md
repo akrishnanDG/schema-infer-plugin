@@ -844,8 +844,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt
-        pip install -e .
+        pip install .
     
     - name: Generate schemas
       run: |

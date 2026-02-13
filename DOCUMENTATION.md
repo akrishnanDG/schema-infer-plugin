@@ -112,26 +112,25 @@ The **Schema Inference Plugin** is a powerful CLI tool that automatically infers
 ### Quick Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/schema-inferinc/schema-infer-plugin.git
-cd schema-infer-plugin
-
-# Install the plugin
-pip install -e .
+# Install directly from GitHub
+pip install git+https://github.com/akrishnanDG/schema-infer-plugin.git
 
 # Verify installation
 schema-infer --help
 ```
 
-### Manual Installation
+### Install from Source
 
 ```bash
-# Install dependencies
-pip3 install -r requirements.txt
+# Clone the repository
+git clone https://github.com/akrishnanDG/schema-infer-plugin.git
+cd schema-infer-plugin
 
-# Copy plugin to Schema Inference CLI directory
-cp schema-infer-schema /usr/local/bin/
-chmod +x /usr/local/bin/schema-infer-schema
+# Install the package
+pip install .
+
+# For development (editable mode with live code changes)
+pip install -e ".[dev]"
 
 # Verify installation
 schema-infer --help
@@ -1389,9 +1388,9 @@ Include the following information:
 
 #### 1. **Development Setup**
 ```bash
-git clone https://github.com/schema-inferinc/schema-infer-plugin.git
+git clone https://github.com/akrishnanDG/schema-infer-plugin.git
 cd schema-infer-plugin
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ```
 
 #### 2. **Running Tests**
@@ -1428,4 +1427,4 @@ The Schema Inference Plugin provides a powerful, flexible, and production-ready 
 
 Whether you're migrating from untyped to typed systems, establishing data governance, or accelerating development workflows, this plugin provides the tools and flexibility you need to succeed.
 
-For more information, examples, and support, visit our [GitHub repository](https://github.com/schema-inferinc/schema-infer-plugin) or contact Schema Inference Support.
+For more information, examples, and support, visit our [GitHub repository](https://github.com/akrishnanDG/schema-infer-plugin) or contact Schema Inference Support.
