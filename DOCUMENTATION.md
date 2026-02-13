@@ -246,6 +246,20 @@ topic_filter:
   exclude_internal: true
   additional_exclude_prefixes: ["__", "temp-", "backup-"]
   include_patterns: [".*-events", "prod-.*"]
+
+# Live Consumer Mode Configuration
+live:
+  consumer_group: "schema-infer-live"     # Stable consumer group for offset tracking
+  batch_size: 100                          # Messages per batch (auto-scales with topic count)
+  batch_timeout_seconds: 30.0             # Max seconds to wait for batch_size messages
+  state_dir: "~/.schema-infer/state"      # Directory for persisting schema state
+  persist_state: true                      # Enable state persistence for resume-on-restart
+  initial_offset: "latest"                # Where to start if no committed offsets (earliest/latest)
+  min_records_before_register: 10         # Min records before first schema registration
+  on_incompatible: "skip"                 # Behavior on incompatible schemas: skip, log, force, fail
+  idle_evict_seconds: 3600                # Evict idle topic state from memory after this many seconds
+  max_concurrent_registrations: 5         # Max parallel schema registrations
+  summary_interval_seconds: 60            # Periodic status summary interval (for many topics)
 ```
 
 ### Configuration Notes
@@ -435,6 +449,101 @@ The watch command:
 - Skips previously processed topics
 - Handles errors gracefully without stopping
 - Stops cleanly on Ctrl+C with a summary
+
+#### `live` - Live Consumer Mode (Schema Evolution)
+
+Continuously consume messages from Kafka topics, incrementally build schemas, detect schema evolution, and re-register updated schemas to Schema Registry. Unlike `infer` (one-shot) and `watch` (new topics only), `live` tracks how data shapes change over time in existing topics.
+
+```bash
+# Basic: monitor one topic and register changes
+schema-infer --config config.yaml live --topic orders --register
+
+# Multiple topics with custom batch tuning
+schema-infer --config config.yaml live \
+  --topics "orders,payments,users" \
+  --register --format avro \
+  --batch-size 200 --batch-timeout 60
+
+# Pattern matching with output files
+schema-infer --config config.yaml live \
+  --topic-pattern "^prod-.*" \
+  --output-dir ./schemas --register
+
+# Force-register incompatible changes
+schema-infer --config config.yaml live \
+  --topic orders --register --on-incompatible force
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--topic / -t` | none | Single topic name |
+| `--topics` | none | Comma-separated topic list |
+| `--topic-prefix` | none | Match topics by prefix |
+| `--topic-pattern` | none | Match topics by regex |
+| `--format / -f` | `avro` | Schema format (avro, protobuf, json-schema) |
+| `--output-dir` | none | Directory for schema files |
+| `--register` | off | Register/update schemas in Schema Registry |
+| `--context` | none | Schema Registry context prefix |
+| `--consumer-group` | `schema-infer-live` | Consumer group for offset tracking |
+| `--batch-size` | `100` | Messages per batch (auto-scales with topic count) |
+| `--batch-timeout` | `30.0` | Seconds to wait for a batch |
+| `--state-dir` | `~/.schema-infer/state/` | State persistence directory |
+| `--no-persist-state` | off | Disable state persistence |
+| `--data-format` | `auto` | Force data format (json, csv, key-value) |
+| `--on-incompatible` | `skip` | Behavior on incompatible schemas (skip, log, force, fail) |
+| `--exclude-internal` | on | Exclude internal topics |
+
+The live command:
+- Continuously consumes new messages as they arrive
+- Incrementally merges field statistics across batches (Counter-based)
+- Detects structural schema changes: new fields, removed fields, type changes, nullability changes
+- Checks compatibility before registration (`--on-incompatible` controls behavior)
+- Persists state to disk for resume-on-restart after Ctrl+C
+- Auto-scales batch size and thread pool workers based on topic count
+- Supports multi-instance horizontal scaling via shared consumer groups
+
+##### Choosing the Right Command
+
+| | `infer` | `watch` | `live` |
+|---|---------|---------|--------|
+| **Purpose** | One-shot schema generation | Detect new topics | Track schema evolution |
+| **Runs** | Once, then exits | Continuously (polls for new topics) | Continuously (consumes messages) |
+| **Processes** | Existing messages | New topics only (each topic once) | New messages on existing topics |
+| **Schema updates** | No | No | Yes -- detects field additions, type changes |
+| **Offset tracking** | No (reads recent messages) | No | Yes (consumer group) |
+| **Resume on restart** | N/A | No (in-memory set) | Yes (persisted state + committed offsets) |
+| **Best for** | Initial schema bootstrap | Topic discovery automation | Production schema governance |
+
+##### Incompatibility Strategies
+
+When `live` mode detects a schema change that fails the Schema Registry compatibility check:
+
+| Strategy | Behavior |
+|----------|----------|
+| `skip` (default) | Log warning, skip registration, continue consuming |
+| `log` | Same as skip + write the incompatible schema to `{output_dir}/{topic}.incompatible.{ext}` |
+| `force` | Temporarily set compatibility to NONE, register, restore original level |
+| `fail` | Log error and exit |
+
+##### Multi-Instance Scaling
+
+For 1000+ topics, run multiple instances with the **same consumer group and state directory**:
+
+```bash
+# Instance 1
+schema-infer --config config.yaml live \
+  --topic-pattern ".*" --register \
+  --consumer-group my-live-group \
+  --state-dir /shared/nfs/schema-state
+
+# Instance 2 (same machine or different host)
+schema-infer --config config.yaml live \
+  --topic-pattern ".*" --register \
+  --consumer-group my-live-group \
+  --state-dir /shared/nfs/schema-state
+```
+
+Kafka distributes partitions across instances. On rebalance (instance added/removed), state for affected topics is persisted to disk by the losing instance and loaded by the gaining instance. Batch size and worker threads auto-scale with topic count.
 
 #### `version` - Version Information
 

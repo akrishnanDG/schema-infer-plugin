@@ -131,6 +131,34 @@ schema_registry:
 schema-infer --config platform-config.yaml infer --topic my-topic --format avro
 ```
 
+## 🔴 Live Consumer Mode (Schema Evolution)
+
+Track how your data evolves over time. Unlike `infer` (one-shot) or `watch` (new topics only), `live` mode continuously consumes messages and detects schema changes.
+
+### Quick Start with Live Mode
+
+```bash
+# Monitor a topic and register schema changes to Schema Registry
+schema-infer --config config.yaml live --topic orders --register
+
+# Monitor multiple topics
+schema-infer --config config.yaml live \
+  --topics "orders,payments,users" \
+  --register --output-dir ./schemas
+```
+
+### When to Use Each Command
+
+| I want to... | Use |
+|---|---|
+| Generate a schema from existing data | `infer` |
+| Auto-infer schemas when new topics appear | `watch` |
+| Track schema evolution in existing topics | `live` |
+| Enforce data contracts in production | `live --on-incompatible fail` |
+| Scale to 1000+ topics | `live` with multiple instances sharing a consumer group |
+
+See the [Examples](EXAMPLES.md#live-consumer-examples) for detailed use-case walkthroughs.
+
 ## 📊 Common Use Cases
 
 ### Generate Schemas for API Documentation
@@ -145,6 +173,14 @@ schema-infer infer --topic-pattern ".*-api" --format json-schema --output-dir ap
 ```bash
 # Generate and register Avro schemas
 schema-infer infer --topic-prefix "legacy-" --format avro --register
+```
+
+### Continuous Schema Governance
+
+```bash
+# Live mode: detect schema drift and keep Schema Registry updated
+schema-infer --config config.yaml live \
+  --topic-pattern "prod-.*" --register --on-incompatible log
 ```
 
 ### Process IoT Data

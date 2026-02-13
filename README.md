@@ -17,6 +17,8 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 - **📊 Schema Registry Integration**: Automatic registration with compatibility management
 - **🛡️ Production Ready**: Schema validation, retry logic, and comprehensive error handling
 - **👁️ Continuous Monitoring**: Watch mode for automatic schema inference on new topics
+- **🔴 Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas
+- **📈 Horizontal Scaling**: Multi-instance support with shared consumer groups for 1000+ topics
 
 ## 📖 Documentation
 
@@ -132,7 +134,7 @@ schema_registry:
   subject_name_strategy: "TopicNameStrategy"
 ```
 
-### Watch Mode (Continuous Monitoring)
+### Watch Mode (New Topic Detection)
 ```bash
 # Watch for new topics and auto-register Avro schemas
 schema-infer --config config.yaml watch --register --context production
@@ -145,6 +147,30 @@ schema-infer --config config.yaml watch --topic-pattern "prod-.*" --register --c
 ```
 
 Watch mode continuously polls the cluster, detects new topics, infers schemas, and optionally registers them to Schema Registry. Topics are only processed once.
+
+### Live Consumer Mode (Schema Evolution Detection)
+```bash
+# Continuously monitor a topic and register evolving schemas
+schema-infer --config config.yaml live --topic orders --register
+
+# Monitor multiple topics with custom batch settings
+schema-infer --config config.yaml live \
+  --topics "orders,payments,users" \
+  --register --format avro \
+  --batch-size 200 --batch-timeout 60
+
+# Scale to 1000+ topics with multiple instances sharing a consumer group
+schema-infer --config config.yaml live \
+  --topic-pattern ".*" --register \
+  --consumer-group my-live-group \
+  --state-dir /shared/state
+
+# Handle incompatible schema changes
+schema-infer --config config.yaml live \
+  --topic orders --register --on-incompatible force
+```
+
+Unlike `watch` (which only detects new topics), `live` mode continuously reads new messages from existing topics, incrementally builds schemas, detects schema evolution (new fields, type changes), and re-registers updated schemas. Consumer offsets are tracked via Kafka consumer groups for resume-on-restart.
 
 ### Performance Optimization
 ```bash
@@ -262,6 +288,19 @@ schema_registry:
   compatibility: "BACKWARD"  # NONE, BACKWARD, FORWARD, FULL
   subject_name_strategy: "TopicNameStrategy"  # TopicName, RecordName, TopicRecordName
   context: "my-context"  # Optional: prefix subjects with :.my-context:
+```
+
+### Live Consumer Configuration
+```yaml
+live:
+  consumer_group: "schema-infer-live"   # Stable consumer group for offset tracking
+  batch_size: 100                        # Messages per batch before re-inferring
+  batch_timeout_seconds: 30.0            # Max wait for a batch
+  initial_offset: "latest"              # Start from latest or earliest
+  persist_state: true                    # Resume from where you left off
+  state_dir: "~/.schema-infer/state"    # State persistence directory
+  min_records_before_register: 10       # Min records before first registration
+  on_incompatible: "skip"               # skip, log, force, or fail
 ```
 
 ## 🧪 Testing

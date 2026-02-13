@@ -5,11 +5,12 @@ Comprehensive examples for the Schema Inference Plugin.
 ## Table of Contents
 
 1. [Basic Examples](#basic-examples)
-2. [Enterprise Examples](#enterprise-examples)
-3. [Cloud Examples](#cloud-examples)
-4. [Advanced Examples](#advanced-examples)
-5. [Integration Examples](#integration-examples)
-6. [Troubleshooting Examples](#troubleshooting-examples)
+2. [Live Consumer Examples](#live-consumer-examples)
+3. [Enterprise Examples](#enterprise-examples)
+4. [Cloud Examples](#cloud-examples)
+5. [Advanced Examples](#advanced-examples)
+6. [Integration Examples](#integration-examples)
+7. [Troubleshooting Examples](#troubleshooting-examples)
 
 ---
 
@@ -233,6 +234,195 @@ message iot_sensor_data {
   }
 }
 ```
+
+---
+
+## Live Consumer Examples
+
+### Example: Schema Evolution Detection
+
+**Scenario**: Your `orders` topic started with basic fields but developers keep adding new fields as the product evolves. You want the Schema Registry to stay up-to-date automatically.
+
+**Config** (`live-config.yaml`):
+```yaml
+kafka:
+  bootstrap_servers: "localhost:9092"
+
+schema_registry:
+  url: "http://localhost:8081"
+  compatibility: "BACKWARD"
+
+live:
+  initial_offset: "latest"
+  batch_size: 100
+  batch_timeout_seconds: 30
+  min_records_before_register: 10
+```
+
+**Command**:
+```bash
+schema-infer --config live-config.yaml live \
+  --topic orders \
+  --register \
+  --format avro \
+  --output-dir ./schemas
+```
+
+**Output** (as data evolves over time):
+```
+Live mode started (batch: 100 msgs / 30.0s, format: avro)
+  Consumer group: schema-infer-live
+  Topics: orders
+  Registering schemas to Schema Registry
+  Press Ctrl+C to stop
+
+[14:23:01] orders: Processed 100 messages (total: 100). 15 fields detected.
+[14:23:01] orders: Initial schema registered (ID: 42)
+[14:23:31] orders: Processed 85 messages (total: 185). No schema changes.
+[14:24:01] orders: Processed 120 messages (total: 305). Schema change detected:
+  + discount_code
+  + loyalty_points
+  Schema updated (ID: 43)
+```
+
+---
+
+### Example: E-commerce Platform with Multiple Topics
+
+**Scenario**: Monitor all e-commerce service topics for schema drift and register changes automatically.
+
+```bash
+schema-infer --config config.yaml live \
+  --topics "orders,payments,users,inventory,shipping" \
+  --register \
+  --format avro \
+  --context ecommerce \
+  --output-dir ./schemas/ecommerce
+```
+
+---
+
+### Example: Handling Incompatible Changes
+
+**Scenario**: A developer removes a required field, breaking BACKWARD compatibility. You want to see what happened without blocking the pipeline.
+
+```bash
+# Log incompatible schemas to files for review, don't register them
+schema-infer --config config.yaml live \
+  --topic user-events \
+  --register \
+  --on-incompatible log \
+  --output-dir ./schemas
+```
+
+This writes the incompatible schema to `./schemas/user-events.incompatible.avsc` so you can review the breaking change.
+
+If you decide the change is intentional:
+```bash
+# Force-register even if incompatible (temporarily sets compatibility to NONE)
+schema-infer --config config.yaml live \
+  --topic user-events \
+  --register \
+  --on-incompatible force
+```
+
+---
+
+### Example: IoT Fleet with 1000+ Device Topics
+
+**Scenario**: You have 2000 topics (`device-001` through `device-2000`), each sending telemetry. You want to detect when devices start sending new sensor readings.
+
+**Config** (`iot-live.yaml`):
+```yaml
+kafka:
+  bootstrap_servers: "kafka.iot-cluster.internal:9092"
+  security_protocol: "SASL_SSL"
+  sasl_mechanism: "PLAIN"
+  cloud_api_key: "YOUR_KEY"
+  cloud_api_secret: "YOUR_SECRET"
+
+schema_registry:
+  url: "https://sr.iot-cluster.internal:8081"
+  compatibility: "FORWARD"
+
+live:
+  consumer_group: "schema-infer-iot"
+  batch_size: 500
+  batch_timeout_seconds: 10
+  persist_state: true
+  state_dir: "/shared/nfs/schema-state"
+  initial_offset: "latest"
+  on_incompatible: "log"
+```
+
+**Run 3 instances for horizontal scaling**:
+```bash
+# Instance 1 (on host-a)
+schema-infer --config iot-live.yaml live \
+  --topic-prefix "device-" \
+  --register --output-dir /shared/nfs/schemas
+
+# Instance 2 (on host-b)
+schema-infer --config iot-live.yaml live \
+  --topic-prefix "device-" \
+  --register --output-dir /shared/nfs/schemas
+
+# Instance 3 (on host-c)
+schema-infer --config iot-live.yaml live \
+  --topic-prefix "device-" \
+  --register --output-dir /shared/nfs/schemas
+```
+
+Kafka distributes the 2000 topics across the 3 instances (~667 each). If an instance goes down, its topics are rebalanced to the remaining instances, and state is picked up from the shared state directory.
+
+---
+
+### Example: Resume After Restart
+
+**Scenario**: You ran `live` mode overnight, then stopped it. You want to continue from where you left off without reprocessing old messages.
+
+```bash
+# First run (processes messages, persists state, tracks offsets)
+schema-infer --config config.yaml live \
+  --topic orders --register --state-dir ./state
+# Press Ctrl+C after some time
+
+# Second run (resumes from committed offsets, loads persisted schema state)
+schema-infer --config config.yaml live \
+  --topic orders --register --state-dir ./state
+```
+
+Output on resume:
+```
+[09:15:01] orders: Resumed from persisted state (1,240 records)
+[09:15:11] orders: Processed 45 messages (total: 1,285). No schema changes.
+```
+
+---
+
+### Example: Data Contract Enforcement
+
+**Scenario**: You want to be alerted and stop processing if someone pushes data that breaks your schema contract.
+
+```bash
+schema-infer --config config.yaml live \
+  --topics "orders,payments" \
+  --register \
+  --on-incompatible fail
+```
+
+If a breaking change is detected:
+```
+[14:30:01] orders: Schema change detected:
+  - removed_field
+[14:30:01] orders: Compatibility check FAILED (level: BACKWARD)
+[14:30:01] orders: Incompatible schema -- exiting
+
+Live mode stopped.
+  Processed 500 messages across 2 topics in 15m 30s
+```
+
+Use this with alerting (e.g., wrap in a script that sends a Slack notification on non-zero exit code).
 
 ---
 
