@@ -134,10 +134,174 @@ class OptimisticProcessor:
                 finally:
                     self._shared_consumer = None
     
+    def read_topics_parallel(
+        self,
+        topic_list: List[str],
+        max_messages: int,
+        timeout: int,
+        max_workers: int = 8,
+        progress_callback=None,
+    ) -> Dict[str, List[Tuple[Optional[bytes], bytes]]]:
+        """
+        Read messages from multiple topics in parallel using a thread pool.
+
+        Each worker thread creates its own consumer (confluent_kafka Consumer
+        is not thread-safe) and processes a subset of topics sequentially.
+
+        Args:
+            topic_list: Topics to read from.
+            max_messages: Max messages per topic.
+            timeout: Timeout per topic in seconds.
+            max_workers: Number of parallel consumer threads.
+            progress_callback: Called with (completed_count, total) after each topic.
+
+        Returns:
+            Dict mapping topic name to list of (key, value) tuples.
+        """
+        if not topic_list:
+            return {}
+
+        # Scale workers: don't create more workers than topics
+        num_workers = min(max_workers, len(topic_list))
+        topic_messages: Dict[str, List[Tuple[Optional[bytes], bytes]]] = {}
+        lock = threading.Lock()
+        completed = [0]
+
+        def _worker_read(topics_chunk: List[str]) -> None:
+            """Worker: create a consumer and read from assigned topics."""
+            # Each worker gets its own consumer
+            consumer_config = {
+                'bootstrap.servers': self.config.kafka.bootstrap_servers,
+                'group.id': f'schema-infer-parallel-{uuid.uuid4().hex[:8]}',
+                'auto.offset.reset': self.config.kafka.auto_offset_reset,
+                'session.timeout.ms': 15000,
+                'heartbeat.interval.ms': 5000,
+                'enable.auto.commit': 'false',
+                'enable.partition.eof': 'false',
+                'fetch.max.bytes': 52428800,
+                'max.partition.fetch.bytes': 10485760,
+                'fetch.wait.max.ms': 50,
+                'fetch.min.bytes': 10240,
+                'queued.min.messages': 2000,
+                'queued.max.messages.kbytes': 65536,
+                'log_level': '7',
+                'log.connection.close': 'false',
+                'log.thread.name': 'false',
+                'broker.address.family': 'v4',
+                'enable.metrics.push': False,
+                'log.queue': 'false',
+                'statistics.interval.ms': '0',
+                'check.crcs': 'false',
+            }
+
+            from ..plugin.auth import AuthenticationManager
+            auth_manager = AuthenticationManager(self.config)
+            auth_config = auth_manager.configure_kafka_auth()
+            consumer_config.update(auth_config)
+
+            consumer = self._create_consumer(consumer_config)
+            try:
+                for topic_name in topics_chunk:
+                    try:
+                        msgs = self._read_single_topic(consumer, topic_name, max_messages, timeout)
+                        if msgs:
+                            with lock:
+                                topic_messages[topic_name] = msgs
+                    except Exception as e:
+                        self.logger.debug(f"Worker failed to read {topic_name}: {e}")
+                    finally:
+                        with lock:
+                            completed[0] += 1
+                        if progress_callback:
+                            progress_callback(completed[0], len(topic_list))
+            finally:
+                try:
+                    consumer.close()
+                except Exception:
+                    pass
+
+        # Split topics across workers
+        chunks = [[] for _ in range(num_workers)]
+        for i, topic in enumerate(topic_list):
+            chunks[i % num_workers].append(topic)
+
+        # Run workers in parallel
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = [executor.submit(_worker_read, chunk) for chunk in chunks if chunk]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    self.logger.warning(f"Worker thread failed: {e}")
+
+        return topic_messages
+
+    def _read_single_topic(
+        self,
+        consumer: Consumer,
+        topic_name: str,
+        max_messages: int,
+        timeout: int,
+    ) -> List[Tuple[Optional[bytes], bytes]]:
+        """Read messages from a single topic using the given consumer."""
+        metadata = consumer.list_topics(topic_name, timeout=5.0)
+        topic_metadata = metadata.topics.get(topic_name)
+
+        if not topic_metadata or not topic_metadata.partitions:
+            return []
+
+        partitions = [
+            confluent_kafka.TopicPartition(topic_name, p)
+            for p in topic_metadata.partitions.keys()
+        ]
+        consumer.assign(partitions)
+
+        # Seek to recent messages
+        for partition in partitions:
+            try:
+                low, high = consumer.get_watermark_offsets(partition, timeout=5.0)
+                if high > low:
+                    target_offset = max(low, high - max_messages)
+                    partition.offset = target_offset
+                    consumer.seek(partition)
+            except Exception:
+                continue
+
+        # Poll messages
+        messages = []
+        poll_start = time.time()
+        consecutive_empty = 0
+
+        while len(messages) < max_messages and time.time() - poll_start < timeout:
+            msg = consumer.poll(0.1)
+            if msg is None:
+                consecutive_empty += 1
+                if consecutive_empty >= 20:
+                    break
+                continue
+
+            consecutive_empty = 0
+
+            if msg.error():
+                if msg.error().code() in (
+                    ConfluentKafkaError._PARTITION_EOF,
+                    ConfluentKafkaError._UNKNOWN_TOPIC_OR_PART,
+                ):
+                    break
+                continue
+
+            try:
+                msg.value().decode('utf-8', errors='ignore')
+                messages.append((msg.key(), msg.value()))
+            except Exception:
+                continue
+
+        return messages[:max_messages]
+
     def __enter__(self):
         """Context manager entry."""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - close shared consumer."""
         self._close_shared_consumer()

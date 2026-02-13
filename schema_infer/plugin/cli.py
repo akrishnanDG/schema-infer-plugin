@@ -314,71 +314,48 @@ def infer(
         
         # Process topics - use shared consumer for both single and multiple topics
         if len(topic_list) > 1:
-            # Shared consumer processing for multiple topics (avoids multiple consumer creation)
+            # Parallel consumer processing for multiple topics
             click.echo(f"\n🚀 Inferring schemas for {len(topic_list)} topics...")
-            
-            # Read messages from all topics using shared consumer
-            topic_messages = {}
-            
-            # Create enhanced progress bar with ETA
+
             from tqdm import tqdm
             import time
             start_time = time.time()
-            
+
+            # Scale workers based on topic count
+            num_workers = min(config.performance.max_workers, len(topic_list))
+            if len(topic_list) > 20:
+                num_workers = max(num_workers, 8)
+            if len(topic_list) > 100:
+                num_workers = max(num_workers, 16)
+
             progress_bar = tqdm(
                 total=len(topic_list),
-                desc="Processing topics",
+                desc=f"Reading messages ({num_workers} workers)",
                 unit="topic",
                 disable=not config.performance.show_progress,
                 bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
                 dynamic_ncols=True
             )
-            
-            for i, topic_name in enumerate(topic_list):
-                topic_start_time = time.time()
-                
-                try:
-                    if not config.performance.show_progress:
-                        click.echo(f"  📝 Processing {topic_name}")
-                    
-                    # Use shared consumer for multiple topics (avoids multiple consumer creation)
-                    messages = processor.read_messages_shared_consumer(topic_name, max_messages, timeout)
-                    
-                    topic_elapsed = time.time() - topic_start_time
-                    
-                    if messages:
-                        topic_messages[topic_name] = messages
-                        progress_bar.set_postfix({
-                            'messages': len(messages),
-                            'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                            'time': f'{topic_elapsed:.1f}s'
-                        })
-                    else:
-                        if not config.performance.show_progress:
-                            click.echo(f"  ⚠️  {topic_name} - no messages found")
-                        progress_bar.set_postfix({
-                            'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                            'time': f'{topic_elapsed:.1f}s',
-                            'status': 'empty'
-                        })
-                except Exception as e:
-                    topic_elapsed = time.time() - topic_start_time
-                    if not config.performance.show_progress:
-                        click.echo(f"  ❌ {topic_name} - failed to process")
-                    progress_bar.set_postfix({
-                        'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                        'time': f'{topic_elapsed:.1f}s',
-                        'status': 'error'
-                    })
-                
+
+            def _progress(completed, total):
                 progress_bar.update(1)
-            
+
+            # Read from all topics in parallel using multiple consumers
+            topic_messages = processor.read_topics_parallel(
+                topic_list, max_messages, timeout,
+                max_workers=num_workers,
+                progress_callback=_progress,
+            )
+
             progress_bar.close()
-            
-            # Show overall timing
+
             total_elapsed = time.time() - start_time
+            empty_count = len(topic_list) - len(topic_messages)
             if config.performance.show_progress:
-                click.echo(f"📊 Message reading completed in {total_elapsed:.1f}s")
+                click.echo(
+                    f"📊 Message reading completed in {total_elapsed:.1f}s "
+                    f"({len(topic_messages)} with data, {empty_count} empty)"
+                )
         
             if topic_messages:
                 # Process all topics in parallel with progress bar
