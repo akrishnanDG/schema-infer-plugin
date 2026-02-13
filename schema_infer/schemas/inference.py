@@ -405,8 +405,9 @@ class SchemaInferrer:
         if total_count == 0:
             return None
         
-        # Determine if field is nullable
-        nullable = null_count > 0
+        # All inferred fields are nullable -- a sample can never guarantee
+        # a field won't be null in future data
+        nullable = True
         
         # Determine the primary type
         non_null_types = {k: v for k, v in type_counts.items() if k != "null"}
@@ -448,8 +449,10 @@ class SchemaInferrer:
 
             field_type = FieldType(base_type_name, nullable=nullable, array=is_array)
         
-        # Determine if field is required
-        required = null_count == 0 or (null_count / total_count) < 0.1
+        # All inferred fields are optional -- a sample of messages can never
+        # guarantee a field is truly required in all future data
+        required = False
+        nullable = True
         
         # Get examples
         examples = list(analysis["examples"])[:3]

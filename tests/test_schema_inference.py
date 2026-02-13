@@ -183,19 +183,21 @@ class TestSchemaInference:
             assert example in all_values
     
     def test_required_field_detection(self):
-        """Test detection of required vs optional fields."""
+        """Test that all inferred fields are optional -- inference from a sample
+        can never guarantee a field is truly required in all future data."""
         data = [
-            {"required_field": "always_present", "optional_field": "sometimes"},
-            {"required_field": "always_present", "optional_field": None},
-            {"required_field": "always_present"}  # optional_field missing
+            {"always_field": "always_present", "optional_field": "sometimes"},
+            {"always_field": "always_present", "optional_field": None},
+            {"always_field": "always_present"}  # optional_field missing
         ]
-        
+
         schema = self.inferrer.infer_schema(data, "required_fields")
-        
-        required_field = next(f for f in schema.fields if f.name == "required_field")
+
+        always_field = next(f for f in schema.fields if f.name == "always_field")
         optional_field = next(f for f in schema.fields if f.name == "optional_field")
-        
-        assert required_field.required == True
+
+        # All inferred fields are optional
+        assert always_field.required == False
         assert optional_field.required == False
     
     def test_max_depth_limiting(self):
