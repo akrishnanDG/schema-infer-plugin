@@ -288,32 +288,39 @@ class SchemaRegistry:
             raise SchemaRegistryError(f"Failed to delete subject: {e}")
     
     def check_compatibility(
-        self, 
-        subject: str, 
-        schema_content: str, 
-        version: Optional[str] = None
+        self,
+        subject: str,
+        schema_content: str,
+        version: Optional[str] = None,
+        schema_format: Optional[str] = None
     ) -> bool:
         """
         Check if a schema is compatible with existing versions.
-        
+
         Args:
             subject: Subject name
             schema_content: Schema content
             version: Version to check against (latest if None)
-            
+            schema_format: Schema format (avro, protobuf, json-schema)
+
         Returns:
             True if compatible
         """
-        
+
         try:
             if version is None:
                 url = f"{self.base_url}/compatibility/subjects/{subject}/versions/latest"
             else:
                 url = f"{self.base_url}/compatibility/subjects/{subject}/versions/{version}"
-            
+
             schema_data = {
                 "schema": schema_content
             }
+
+            # Include schemaType so SR doesn't default to Avro
+            if schema_format:
+                registry_type = self._map_format_to_registry_type(schema_format)
+                schema_data["schemaType"] = registry_type
             
             response = requests.post(
                 url,

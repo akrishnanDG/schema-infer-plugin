@@ -513,7 +513,7 @@ class LiveModeOrchestrator:
         if subject_exists:
             try:
                 is_compatible = self.registry.check_compatibility(
-                    subject, schema_content
+                    subject, schema_content, schema_format=self.schema_format
                 )
             except SchemaRegistryError:
                 # If compatibility check fails (e.g., no existing schema), proceed
