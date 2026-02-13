@@ -124,10 +124,23 @@ class IncrementalSchemaState:
         self.dirty = True
 
         # Re-derive schema from merged state
+        # Fields that weren't present in every record are marked optional
+        # to ensure backward-compatible schema evolution
         fields = []
         for field_name, analysis in self.field_analysis.items():
             schema_field = self.schema_analyzer.create_schema_field(field_name, analysis)
             if schema_field:
+                # A field that doesn't appear in every record across all
+                # batches must be optional -- its total_count will be less
+                # than the overall total_records_processed
+                if analysis["total_count"] < self.total_records_processed:
+                    schema_field.required = False
+                    if not schema_field.field_type.nullable:
+                        schema_field.field_type = FieldType(
+                            schema_field.field_type.name,
+                            nullable=True,
+                            array=schema_field.field_type.array,
+                        )
                 fields.append(schema_field)
 
         fields.sort(key=lambda f: f.name)
