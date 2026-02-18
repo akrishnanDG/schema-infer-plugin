@@ -12,12 +12,13 @@
 8. [Data Format Support](#data-format-support)
 9. [Performance & Optimization](#performance--optimization)
 10. [Advanced Features](#advanced-features)
-11. [Troubleshooting](#troubleshooting)
-12. [API Reference](#api-reference)
-13. [Examples](#examples)
-14. [Best Practices](#best-practices)
-15. [Limitations](#limitations)
-16. [Support](#support)
+11. [Using with Terraform](#using-with-terraform)
+12. [Troubleshooting](#troubleshooting)
+13. [API Reference](#api-reference)
+14. [Examples](#examples)
+15. [Best Practices](#best-practices)
+16. [Limitations](#limitations)
+17. [Support](#support)
 
 ---
 
@@ -877,6 +878,263 @@ inference:
   max_depth: 3                # Limit nesting depth
   confidence_threshold: 0.9   # Higher confidence threshold
 ```
+
+---
+
+## Using with Terraform
+
+The Schema Inference Plugin integrates with the [Confluent Terraform Provider](https://registry.terraform.io/providers/confluentinc/confluent/latest) via a reusable Terraform module. This enables Infrastructure-as-Code workflows where schemas are inferred from Confluent Cloud Kafka topics during `terraform plan` and registered to Confluent Cloud Schema Registry through `confluent_schema` resources.
+
+> **Note**: Terraform integration is supported with **Confluent Cloud** only.
+
+### Overview
+
+The Terraform module uses Terraform's built-in `external` data source to call the `schema-infer` CLI. The inferred schema string feeds directly into `confluent_schema` resources managed by the official Confluent provider. The module auto-installs `schema-infer` if it is not already present.
+
+```
+terraform plan
+    |
+    +-> external data source calls schema-infer CLI
+    |   (connects to Kafka, samples messages, infers schema)
+    |
+    +-> confluent_schema compares inferred schema against state
+    |   (shows diff if schema evolved)
+    |
+    +-> terraform apply registers via Confluent provider
+```
+
+### Prerequisites
+
+- Terraform >= 1.0
+- Python 3.9+ (the module auto-installs `schema-infer` on first run)
+- A Confluent Cloud Kafka cluster with data in topics
+- Confluent Terraform Provider configured for Confluent Cloud Schema Registry access
+
+### Installation
+
+Reference the module from your Terraform configuration. No separate install step is required -- `schema-infer` is installed automatically on the first `terraform plan`.
+
+```hcl
+terraform {
+  required_providers {
+    confluent = {
+      source  = "confluentinc/confluent"
+      version = "~> 2.0"
+    }
+  }
+}
+
+module "inferred_schemas" {
+  source = "github.com/akrishnanDG/terraform-schema-infer"
+  # ... configuration below
+}
+```
+
+### Configuration Option A: Inline Variables (Recommended)
+
+Pass Confluent Cloud credentials directly as Terraform variables. No YAML config file needed. Credentials can come from `terraform.tfvars`, environment variables, Terraform Cloud variable sets, or HashiCorp Vault.
+
+```hcl
+module "inferred_schemas" {
+  source = "github.com/akrishnanDG/terraform-schema-infer"
+
+  bootstrap_servers = "pkc-xxxxx.us-east-1.aws.confluent.cloud:9092"
+  kafka_api_key     = var.kafka_api_key
+  kafka_api_secret  = var.kafka_api_secret
+
+  topics       = ["orders", "payments", "users"]
+  format       = "avro"
+  max_messages = 100
+}
+```
+
+### Configuration Option B: YAML Config File
+
+If you already have a configuration file for the CLI, reference it directly:
+
+```hcl
+module "inferred_schemas" {
+  source      = "github.com/akrishnanDG/terraform-schema-infer"
+  config_file = "${path.module}/cc-config.yaml"
+  topics      = ["orders", "payments", "users"]
+  format      = "avro"
+}
+```
+
+### Registering Schemas with Confluent Provider
+
+Wire the module output into `confluent_schema` resources:
+
+```hcl
+resource "confluent_schema" "inferred" {
+  for_each     = module.inferred_schemas.schemas
+  subject_name = "${each.key}-value"
+  format       = "AVRO"
+  schema       = each.value
+
+  schema_registry_cluster {
+    id = confluent_schema_registry_cluster.main.id
+  }
+
+  rest_endpoint = confluent_schema_registry_cluster.main.rest_endpoint
+
+  credentials {
+    key    = var.sr_api_key
+    secret = var.sr_api_secret
+  }
+}
+```
+
+### Module Variables Reference
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `topics` | Yes | - | List of Confluent Cloud Kafka topic names to infer schemas from |
+| `format` | No | `avro` | Output format: `avro`, `protobuf`, or `json-schema` |
+| `max_messages` | No | `100` | Maximum messages to sample per topic |
+| `config_file` | No | `""` | Path to YAML config file (Option B) |
+| `bootstrap_servers` | No | `""` | Confluent Cloud bootstrap servers (Option A) |
+| `kafka_api_key` | No | `""` | Confluent Cloud Kafka API key (Option A, sensitive) |
+| `kafka_api_secret` | No | `""` | Confluent Cloud Kafka API secret (Option A, sensitive) |
+
+### Module Outputs
+
+| Output | Type | Description |
+|--------|------|-------------|
+| `schemas` | `map(string)` | Map of topic name to inferred schema string |
+
+### Complete Example
+
+```hcl
+terraform {
+  required_providers {
+    confluent = {
+      source  = "confluentinc/confluent"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "confluent" {
+  cloud_api_key    = var.confluent_cloud_api_key
+  cloud_api_secret = var.confluent_cloud_api_secret
+}
+
+locals {
+  topics = ["orders", "payments", "users", "inventory", "shipments"]
+}
+
+module "inferred_schemas" {
+  source = "github.com/akrishnanDG/terraform-schema-infer"
+
+  bootstrap_servers = var.bootstrap_servers
+  kafka_api_key     = var.kafka_api_key
+  kafka_api_secret  = var.kafka_api_secret
+
+  topics       = local.topics
+  format       = "avro"
+  max_messages = 100
+}
+
+resource "confluent_schema" "inferred" {
+  for_each = module.inferred_schemas.schemas
+
+  subject_name = "${each.key}-value"
+  format       = "AVRO"
+  schema       = each.value
+
+  schema_registry_cluster {
+    id = var.sr_cluster_id
+  }
+
+  rest_endpoint = var.sr_rest_endpoint
+
+  credentials {
+    key    = var.sr_api_key
+    secret = var.sr_api_secret
+  }
+}
+
+output "registered_subjects" {
+  value = [for k, v in confluent_schema.inferred : v.subject_name]
+}
+```
+
+### Terraform Lifecycle Behavior
+
+| Action | What happens |
+|--------|-------------|
+| `terraform plan` | Connects to Kafka, samples messages from each topic, infers schemas, shows diff against state |
+| `terraform apply` | Registers inferred schemas to Schema Registry via the Confluent provider |
+| `terraform plan` (again) | Re-infers schemas; if topic data hasn't changed, shows no diff |
+| `terraform destroy` | Deletes `confluent_schema` resources from Schema Registry |
+
+### Ongoing Usage
+
+- **New topic**: Add it to the `topics` list, run `terraform plan/apply`
+- **Schema evolved**: Run `terraform plan` -- it re-infers and shows the diff. Apply to register the new version.
+- **Remove a topic**: Remove it from the list, run `terraform apply` to destroy the schema resource
+
+### Alternative: Generate Schemas Separately, Register with Terraform
+
+Instead of inferring schemas inline during `terraform plan`, you can generate schema files separately using the CLI and have Terraform read them from disk. This decouples schema generation from Terraform runs, allows human review, and works with `watch` and `live` modes.
+
+#### One-Shot Generation
+
+```bash
+# Generate schema files
+schema-infer --config cc-config.yaml infer \
+  --topic-pattern ".*" --format avro --output-dir ./schemas/ --exclude-internal
+```
+
+#### Continuous Detection with Watch Mode
+
+Run as a service to detect new topics and generate schema files automatically:
+
+```bash
+schema-infer --config cc-config.yaml watch \
+  --topic-pattern ".*" --format avro --output-dir ./schemas/ --interval 60
+```
+
+#### Schema Evolution with Live Mode
+
+Run as a service to continuously consume messages, detect schema evolution, and update schema files:
+
+```bash
+schema-infer --config cc-config.yaml live \
+  --topic-pattern ".*" --format avro --output-dir ./schemas/
+```
+
+#### Terraform Reads Schema Files from Disk
+
+```hcl
+locals {
+  schema_files = fileset("${path.module}/schemas", "*.avsc")
+  topic_schemas = {
+    for f in local.schema_files :
+    trimsuffix(f, ".avsc") => file("${path.module}/schemas/${f}")
+  }
+}
+
+resource "confluent_schema" "inferred" {
+  for_each     = local.topic_schemas
+  subject_name = "${each.key}-value"
+  format       = "AVRO"
+  schema       = each.value
+  # ... cluster config, credentials
+}
+```
+
+No Kafka connection is needed during `terraform plan` -- Terraform just reads the files. New or updated schema files trigger changes on the next `terraform apply`. This works well with CI/CD pipelines that trigger on git commits to the `schemas/` directory.
+
+For the full guide including CI/CD integration examples, see [TERRAFORM.md](TERRAFORM.md).
+
+### Limitations
+
+- The inline module approach runs on every `terraform plan`, connecting to Kafka each time
+- Requires Python 3.9+ on the machine running Terraform
+- Credentials passed via inline variables are written to a temporary file during inference (deleted immediately after)
+- Errors from the CLI surface as generic `external` data source errors in Terraform output
 
 ---
 
