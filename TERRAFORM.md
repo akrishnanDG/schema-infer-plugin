@@ -450,6 +450,40 @@ jobs:
 - **`watch` + file()**: Best for environments where new topics appear regularly and need auto-discovery
 - **`live` + file()**: Best for production schema governance where data shapes evolve over time
 
+## Integration with Confluent Tableflow
+
+Schema inference pairs with [Tableflow](https://docs.confluent.io/cloud/current/topics/tableflow/overview.html) to materialize schemaless Kafka topics as Iceberg/Delta Lake tables. Add `confluent_tableflow_topic` resources alongside your inferred schemas:
+
+```hcl
+resource "confluent_tableflow_topic" "materialized" {
+  for_each = module.inferred_schemas.schemas
+
+  environment {
+    id = var.environment_id
+  }
+  kafka_cluster {
+    id = var.kafka_cluster_id
+  }
+
+  display_name  = each.key
+  table_formats = ["ICEBERG"]
+  managed_storage {}
+
+  credentials {
+    key    = var.tableflow_api_key
+    secret = var.tableflow_api_secret
+  }
+
+  depends_on = [confluent_schema.inferred]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+```
+
+The `depends_on` ensures schemas are registered before Tableflow attempts materialization. For the full guide, see [TABLEFLOW.md](TABLEFLOW.md).
+
 ## Troubleshooting
 
 ### "schema-infer command not found"

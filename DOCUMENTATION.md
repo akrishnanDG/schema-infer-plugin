@@ -13,12 +13,13 @@
 9. [Performance & Optimization](#performance--optimization)
 10. [Advanced Features](#advanced-features)
 11. [Using with Terraform](#using-with-terraform)
-12. [Troubleshooting](#troubleshooting)
-13. [API Reference](#api-reference)
-14. [Examples](#examples)
-15. [Best Practices](#best-practices)
-16. [Limitations](#limitations)
-17. [Support](#support)
+12. [Using with Confluent Tableflow](#using-with-confluent-tableflow)
+13. [Troubleshooting](#troubleshooting)
+14. [API Reference](#api-reference)
+15. [Examples](#examples)
+16. [Best Practices](#best-practices)
+17. [Limitations](#limitations)
+18. [Support](#support)
 
 ---
 
@@ -1135,6 +1136,116 @@ For the full guide including CI/CD integration examples, see [TERRAFORM.md](TERR
 - Requires Python 3.9+ on the machine running Terraform
 - Credentials passed via inline variables are written to a temporary file during inference (deleted immediately after)
 - Errors from the CLI surface as generic `external` data source errors in Terraform output
+
+---
+
+## Using with Confluent Tableflow
+
+Confluent [Tableflow](https://docs.confluent.io/cloud/current/topics/tableflow/overview.html) materializes Kafka topics as Apache Iceberg or Delta Lake tables. Tableflow uses Schema Registry as the source of truth for table structure -- **if a topic doesn't have a schema registered, Tableflow can't materialize it**.
+
+Schema inference solves this by reading messages from schemaless topics, inferring the structure, and registering schemas so Tableflow can create tables.
+
+> **Note**: Tableflow is a Confluent Cloud feature. This integration is supported with **Confluent Cloud** only.
+
+### Quick Start (CLI)
+
+```bash
+# Infer schema and register to Schema Registry
+schema-infer --config cc-config.yaml infer \
+  --topic orders --format avro --register
+
+# Then enable Tableflow via Confluent CLI
+confluent tableflow topic create orders \
+  --cluster lkc-xxxxx \
+  --environment env-xxxxx \
+  --table-formats ICEBERG
+```
+
+### Fully Automated with Terraform
+
+Combine schema inference, schema registration, and Tableflow enablement in a single Terraform config:
+
+```hcl
+locals {
+  topics = ["orders", "payments", "users"]
+}
+
+# Step 1: Infer schemas
+module "inferred_schemas" {
+  source = "github.com/akrishnanDG/terraform-schema-infer"
+
+  bootstrap_servers = var.bootstrap_servers
+  kafka_api_key     = var.kafka_api_key
+  kafka_api_secret  = var.kafka_api_secret
+
+  topics       = local.topics
+  format       = "avro"
+  max_messages = 100
+}
+
+# Step 2: Register schemas
+resource "confluent_schema" "inferred" {
+  for_each     = module.inferred_schemas.schemas
+  subject_name = "${each.key}-value"
+  format       = "AVRO"
+  schema       = each.value
+  # ... cluster config, credentials
+}
+
+# Step 3: Enable Tableflow
+resource "confluent_tableflow_topic" "materialized" {
+  for_each = module.inferred_schemas.schemas
+
+  environment {
+    id = var.environment_id
+  }
+  kafka_cluster {
+    id = var.kafka_cluster_id
+  }
+
+  display_name  = each.key
+  table_formats = ["ICEBERG"]
+  managed_storage {}
+
+  credentials {
+    key    = var.tableflow_api_key
+    secret = var.tableflow_api_secret
+  }
+
+  # Schema must be registered before Tableflow can materialize
+  depends_on = [confluent_schema.inferred]
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+```
+
+The `depends_on` is critical -- Tableflow will fail if the schema isn't registered first.
+
+### Schema Evolution with Live Mode
+
+Use `live` mode to continuously track schema changes. When new fields appear, the schema file is updated, Terraform registers the new version, and Tableflow automatically reflects the updated table structure.
+
+```bash
+# Live mode detects schema evolution and updates files
+schema-infer --config cc-config.yaml live \
+  --topics "orders,payments,users" \
+  --format avro --output-dir ./schemas/
+```
+
+A CI/CD pipeline triggers `terraform apply` when schema files change, updating Schema Registry. Tableflow picks up the new table structure automatically.
+
+### Tableflow Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| `table_formats` | `["ICEBERG"]`, `["DELTA"]`, or `["ICEBERG", "DELTA"]` |
+| `managed_storage {}` | Confluent-managed storage |
+| `byob_aws { bucket_name, provider_integration_id }` | Bring your own S3 bucket |
+| `error_handling { mode }` | `SUSPEND`, `SKIP`, or `LOG` on bad records |
+
+For the full Tableflow integration guide, see [TABLEFLOW.md](TABLEFLOW.md).
 
 ---
 

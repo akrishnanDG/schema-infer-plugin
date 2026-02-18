@@ -30,6 +30,7 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 | **[💡 Examples](EXAMPLES.md)** | Comprehensive examples for all use cases |
 | **[🧪 Testing Guide](TESTING.md)** | Testing documentation and examples |
 | **[🔧 Using with Terraform](TERRAFORM.md)** | Terraform module integration guide |
+| **[📊 Using with Tableflow](TABLEFLOW.md)** | Materialize topics as Iceberg/Delta tables |
 
 ## 🏃‍♂️ Quick Start
 
@@ -337,6 +338,51 @@ resource "confluent_schema" "inferred" {
 ```
 
 For the full Terraform guide including `watch` mode, `live` mode, and CI/CD integration, see [TERRAFORM.md](TERRAFORM.md).
+
+## Using with Confluent Tableflow
+
+Confluent [Tableflow](https://docs.confluent.io/cloud/current/topics/tableflow/overview.html) materializes Kafka topics as Apache Iceberg or Delta Lake tables, but requires schemas registered in Schema Registry. Schema inference bridges the gap for schemaless topics.
+
+```bash
+# Infer and register schemas, then enable Tableflow
+schema-infer --config cc-config.yaml infer \
+  --topics "orders,payments,users" --format avro --register
+```
+
+Or fully automated with Terraform:
+
+```hcl
+# Infer schemas
+module "inferred_schemas" {
+  source            = "github.com/akrishnanDG/terraform-schema-infer"
+  bootstrap_servers = var.bootstrap_servers
+  kafka_api_key     = var.kafka_api_key
+  kafka_api_secret  = var.kafka_api_secret
+  topics            = ["orders", "payments", "users"]
+  format            = "avro"
+}
+
+# Register schemas
+resource "confluent_schema" "inferred" {
+  for_each     = module.inferred_schemas.schemas
+  subject_name = "${each.key}-value"
+  format       = "AVRO"
+  schema       = each.value
+  # ... cluster config, credentials
+}
+
+# Enable Tableflow
+resource "confluent_tableflow_topic" "materialized" {
+  for_each      = module.inferred_schemas.schemas
+  display_name  = each.key
+  table_formats = ["ICEBERG"]
+  managed_storage {}
+  depends_on    = [confluent_schema.inferred]
+  # ... environment, cluster, credentials
+}
+```
+
+For the full guide including live mode, file-based approach, and troubleshooting, see [TABLEFLOW.md](TABLEFLOW.md).
 
 ## 💼 Use Cases
 
