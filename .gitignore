@@ -87,6 +87,15 @@ test-cc-*.yaml
 test-live-*.yaml
 test-scale-*.yaml
 test-cc-batch.yaml
+test-config-*.yaml
+
+# Terraform test files with secrets
+terraform-schema-infer/test/
+*.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
 
 # Test output directories
 cc-live-schemas/
