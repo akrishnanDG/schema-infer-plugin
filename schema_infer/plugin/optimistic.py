@@ -271,16 +271,20 @@ class OptimisticProcessor:
         messages = []
         poll_start = time.time()
         consecutive_empty = 0
+        got_first_message = False
 
         while len(messages) < max_messages and time.time() - poll_start < timeout:
             msg = consumer.poll(0.1)
             if msg is None:
                 consecutive_empty += 1
-                if consecutive_empty >= 20:
+                # Be patient before first message (broker fetch prep on Confluent Cloud)
+                limit = 20 if got_first_message else 50
+                if consecutive_empty >= limit:
                     break
                 continue
 
             consecutive_empty = 0
+            got_first_message = True
 
             if msg.error():
                 if msg.error().code() in (
@@ -689,20 +693,27 @@ class OptimisticProcessor:
             batch_count = 0
             max_batches = max(200, max_messages // 2)  # Reduced batch limit
             consecutive_empty_polls = 0
-            max_empty_polls = 20  # Stop after 20 consecutive empty polls
-            
+            got_first_message = False
+            # The first fetch after assign()+seek() can take several seconds on
+            # Confluent Cloud while the broker prepares the fetch response.  Be
+            # patient initially, then tighten up once data starts flowing.
+            max_empty_polls_initial = 50   # 5s patience before first message
+            max_empty_polls_streaming = 20  # 2s patience once data is flowing
+
             while valid_messages < max_messages and time.time() - poll_start < timeout and batch_count < max_batches:
                 batch_count += 1
-                
-                msg = consumer.poll(0.1)  # Slightly longer poll timeout
-                
+
+                msg = consumer.poll(0.1)
+
                 if msg is None:
                     consecutive_empty_polls += 1
-                    if consecutive_empty_polls >= max_empty_polls:
+                    current_limit = max_empty_polls_streaming if got_first_message else max_empty_polls_initial
+                    if consecutive_empty_polls >= current_limit:
                         break
                     continue
-                
+
                 consecutive_empty_polls = 0  # Reset counter on successful poll
+                got_first_message = True
                     
                 if msg.error():
                     if msg.error().code() == ConfluentKafkaError._PARTITION_EOF:
