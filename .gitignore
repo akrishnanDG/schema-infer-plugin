@@ -105,5 +105,7 @@ scale-test-schemas/
 # Test scripts
 test_producer.py
 test_scale.py
+cc_producer.py
+cc_producer_complex.py
 run_live_test.sh
 run_scale_test.sh

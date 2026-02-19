@@ -389,24 +389,62 @@ def infer(
 
                 # Register schemas if requested
                 if register and registry and results['schemas']:
-                    click.echo(f"\n📤 Registering {len(results['schemas'])} schemas to Schema Registry...")
-                    for topic_name, schema_dict in results['schemas'].items():
-                        try:
-                            schema_content = inferrer.generate_schema(schema_dict, format)
-                            # Validate schema before registration
-                            from ..utils.validators import validate_generated_schema
-                            is_valid, validation_error = validate_generated_schema(schema_content, format)
-                            if not is_valid:
-                                click.echo(f"  ❌ {topic_name}: Generated schema is invalid: {validation_error}", err=True)
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+                    from ..utils.validators import validate_generated_schema
+                    import threading
+
+                    num_schemas = len(results['schemas'])
+                    reg_workers = min(config.performance.max_workers, num_schemas)
+                    click.echo(f"\n📤 Registering {num_schemas} schemas to Schema Registry ({reg_workers} workers)...")
+
+                    reg_start = time.time()
+                    reg_lock = threading.Lock()
+                    reg_success = 0
+                    reg_fail = 0
+
+                    def _register_one(topic_name, schema_dict):
+                        schema_content = inferrer.generate_schema(schema_dict, format)
+                        is_valid, validation_error = validate_generated_schema(schema_content, format)
+                        if not is_valid:
+                            return (topic_name, False, f"Generated schema is invalid: {validation_error}")
+                        schema_id = registry.register_schema(topic_name, schema_content, format)
+                        return (topic_name, True, schema_id)
+
+                    reg_progress = tqdm(
+                        total=num_schemas,
+                        desc=f"Registering schemas ({reg_workers} workers)",
+                        unit="schema",
+                        disable=not config.performance.show_progress,
+                        bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
+                        dynamic_ncols=True,
+                    )
+
+                    with ThreadPoolExecutor(max_workers=reg_workers) as reg_executor:
+                        future_to_topic = {
+                            reg_executor.submit(_register_one, tn, sd): tn
+                            for tn, sd in results['schemas'].items()
+                        }
+                        for future in as_completed(future_to_topic):
+                            reg_progress.update(1)
+                            try:
+                                topic_name, ok, result_val = future.result()
+                                if ok:
+                                    reg_success += 1
+                                else:
+                                    click.echo(f"  ❌ {topic_name}: {result_val}", err=True)
+                                    error_count += 1
+                                    success_count -= 1
+                                    reg_fail += 1
+                            except Exception as e:
+                                tn = future_to_topic[future]
+                                click.echo(f"  ❌ {tn}: Registration failed - {e}", err=True)
                                 error_count += 1
                                 success_count -= 1
-                                continue
-                            schema_id = registry.register_schema(topic_name, schema_content, format)
-                            click.echo(f"  ✅ {topic_name}: Registered with ID {schema_id}")
-                        except Exception as e:
-                            click.echo(f"  ❌ {topic_name}: Registration failed - {e}", err=True)
-                            error_count += 1
-                            success_count -= 1
+                                reg_fail += 1
+
+                    reg_progress.close()
+                    reg_elapsed = time.time() - reg_start
+                    click.echo(f"📊 Registration completed in {reg_elapsed:.1f}s ({reg_success} registered, {reg_fail} failed)")
             else:
                 success_count = 0
                 error_count = len(topic_list)

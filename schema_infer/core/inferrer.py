@@ -104,6 +104,7 @@ class SchemaInferrer:
                         output_file = f"{safe_name}.{file_ext}"
                     
                     # Write schema to file
+                    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
                     with open(output_file, 'w') as f:
                         f.write(schema_content)
                     

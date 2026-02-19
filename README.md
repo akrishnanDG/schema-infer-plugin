@@ -420,11 +420,12 @@ schema-infer infer --topic-pattern ".*-api" --format json-schema --output-dir ap
 
 ## ⚡ Performance Features
 
-- **🔄 Parallel Processing**: Multi-threaded topic processing
+- **🔄 Parallel Processing**: Multi-threaded topic processing for message reading, schema generation, and schema registration
 - **📈 Optimized Message Reading**: Smart offset selection and batch processing
 - **🔗 Connection Reuse**: Efficient Kafka consumer management
 - **📊 Progress Tracking**: Real-time progress bars and ETA
 - **💾 Memory Management**: Configurable memory limits and streaming processing
+- **📤 Parallel Schema Registration**: Concurrent schema registration to Schema Registry using configurable worker threads (controlled by `max_workers`)
 
 ## 🎛️ Configuration Options
 
@@ -440,7 +441,7 @@ topic_filter:
 ### Performance Tuning
 ```yaml
 performance:
-  max_workers: 4
+  max_workers: 8          # Worker threads for parallel message reading, schema generation, and registration
   batch_size: 100
   memory_limit_mb: 512
   enable_caching: true
@@ -496,6 +497,7 @@ python run_tests.py --coverage
 2. **📋 Schema Registry Issues**: Verify URL and credentials
 3. **⚡ Performance Issues**: Adjust timeout and worker settings
 4. **💾 Memory Issues**: Increase memory limits or reduce batch sizes
+5. **📭 Empty Topics**: When processing many topics in parallel with a high `max_workers` value, some topics may appear empty due to broker connection saturation. Each worker creates its own consumer connection, and too many concurrent connections can cause timeouts during the initial offset fetch. Reduce `max_workers` or increase `--timeout` to mitigate this.
 
 ### Debug Mode
 
