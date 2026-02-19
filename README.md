@@ -497,7 +497,7 @@ python run_tests.py --coverage
 2. **📋 Schema Registry Issues**: Verify URL and credentials
 3. **⚡ Performance Issues**: Adjust timeout and worker settings
 4. **💾 Memory Issues**: Increase memory limits or reduce batch sizes
-5. **📭 Empty Topics**: When processing many topics in parallel with a high `max_workers` value, some topics may appear empty due to broker connection saturation. Each worker creates its own consumer connection, and too many concurrent connections can cause timeouts during the initial offset fetch. Reduce `max_workers` or increase `--timeout` to mitigate this.
+5. **📭 Empty Topics**: When processing many topics, some may appear empty due to broker connection timeouts. The `infer` command uses a small reader pool (5 consumer connections) separate from the processing worker pool to avoid connection saturation. If you still see empty topics, try increasing `--timeout` to give readers more time per topic.
 
 ### Debug Mode
 

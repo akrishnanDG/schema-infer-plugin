@@ -321,16 +321,20 @@ def infer(
             import time
             start_time = time.time()
 
-            # Scale workers based on topic count
+            # Scale processing workers based on topic count
             num_workers = min(config.performance.max_workers, len(topic_list))
             if len(topic_list) > 20:
                 num_workers = max(num_workers, 8)
             if len(topic_list) > 100:
                 num_workers = max(num_workers, 16)
 
+            # Reader pool: small fixed number of consumer connections
+            # to avoid broker saturation (independent of processing workers)
+            num_readers = min(5, len(topic_list))
+
             progress_bar = tqdm(
                 total=len(topic_list),
-                desc=f"Reading messages ({num_workers} workers)",
+                desc=f"Reading messages ({num_readers} readers)",
                 unit="topic",
                 disable=not config.performance.show_progress,
                 bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
@@ -340,10 +344,11 @@ def infer(
             def _progress(completed, total):
                 progress_bar.update(1)
 
-            # Read from all topics in parallel using multiple consumers
+            # Read from all topics using a small reader pool (few consumers)
+            # Processing workers (num_workers) are used later for inference/registration
             topic_messages = processor.read_topics_parallel(
                 topic_list, max_messages, timeout,
-                max_workers=num_workers,
+                max_readers=num_readers,
                 progress_callback=_progress,
             )
 

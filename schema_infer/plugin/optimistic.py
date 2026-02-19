@@ -140,19 +140,24 @@ class OptimisticProcessor:
         max_messages: int,
         timeout: int,
         max_workers: int = 8,
+        max_readers: int = 5,
         progress_callback=None,
     ) -> Dict[str, List[Tuple[Optional[bytes], bytes]]]:
         """
-        Read messages from multiple topics in parallel using a thread pool.
+        Read messages from multiple topics using a small reader pool.
 
-        Each worker thread creates its own consumer (confluent_kafka Consumer
-        is not thread-safe) and processes a subset of topics sequentially.
+        Uses a small, fixed number of consumer connections (max_readers) to
+        avoid broker connection saturation, independent of the processing
+        worker count (max_workers). Each reader creates one Kafka consumer
+        and processes a chunk of topics sequentially.
 
         Args:
             topic_list: Topics to read from.
             max_messages: Max messages per topic.
             timeout: Timeout per topic in seconds.
-            max_workers: Number of parallel consumer threads.
+            max_workers: Ignored for reading (kept for backward compatibility).
+                         Use max_readers to control consumer connections.
+            max_readers: Number of consumer connections (default 5, capped at 10).
             progress_callback: Called with (completed_count, total) after each topic.
 
         Returns:
@@ -161,15 +166,14 @@ class OptimisticProcessor:
         if not topic_list:
             return {}
 
-        # Scale workers: don't create more workers than topics
-        num_workers = min(max_workers, len(topic_list))
+        # Cap readers to avoid broker connection saturation
+        num_readers = min(max_readers, len(topic_list), 10)
         topic_messages: Dict[str, List[Tuple[Optional[bytes], bytes]]] = {}
         lock = threading.Lock()
         completed = [0]
 
-        def _worker_read(topics_chunk: List[str]) -> None:
-            """Worker: create a consumer and read from assigned topics."""
-            # Each worker gets its own consumer
+        def _reader_worker(topics_chunk: List[str]) -> None:
+            """Reader: create a single consumer and read from assigned topics."""
             consumer_config = {
                 'bootstrap.servers': self.config.kafka.bootstrap_servers,
                 'group.id': f'schema-infer-parallel-{uuid.uuid4().hex[:8]}',
@@ -208,7 +212,7 @@ class OptimisticProcessor:
                             with lock:
                                 topic_messages[topic_name] = msgs
                     except Exception as e:
-                        self.logger.debug(f"Worker failed to read {topic_name}: {e}")
+                        self.logger.debug(f"Reader failed to read {topic_name}: {e}")
                     finally:
                         with lock:
                             completed[0] += 1
@@ -220,19 +224,19 @@ class OptimisticProcessor:
                 except Exception:
                     pass
 
-        # Split topics across workers
-        chunks = [[] for _ in range(num_workers)]
+        # Split topics across readers (not workers)
+        chunks = [[] for _ in range(num_readers)]
         for i, topic in enumerate(topic_list):
-            chunks[i % num_workers].append(topic)
+            chunks[i % num_readers].append(topic)
 
-        # Run workers in parallel
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            futures = [executor.submit(_worker_read, chunk) for chunk in chunks if chunk]
+        # Run readers in parallel — small pool of consumers
+        with ThreadPoolExecutor(max_workers=num_readers) as executor:
+            futures = [executor.submit(_reader_worker, chunk) for chunk in chunks if chunk]
             for future in as_completed(futures):
                 try:
                     future.result()
                 except Exception as e:
-                    self.logger.warning(f"Worker thread failed: {e}")
+                    self.logger.warning(f"Reader thread failed: {e}")
 
         return topic_messages
 
