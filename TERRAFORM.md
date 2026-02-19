@@ -34,7 +34,7 @@ The module auto-installs `schema-infer` via pip on the first run if it is not al
 
 ### Option A: Inline Variables (Recommended)
 
-Pass Confluent Cloud credentials directly as Terraform variables. No YAML config file needed.
+Pass Confluent Cloud credentials directly as Terraform variables. No YAML config file needed. Use `json-schema` for topics with unserialized JSON messages, since it matches the data already on the wire.
 
 ```hcl
 terraform {
@@ -60,7 +60,7 @@ module "inferred_schemas" {
   kafka_api_secret  = var.kafka_api_secret
 
   topics       = ["orders", "payments", "users"]
-  format       = "avro"
+  format       = "json-schema"
   max_messages = 100
 }
 
@@ -68,7 +68,7 @@ module "inferred_schemas" {
 resource "confluent_schema" "inferred" {
   for_each     = module.inferred_schemas.schemas
   subject_name = "${each.key}-value"
-  format       = "AVRO"
+  format       = "JSON"
   schema       = each.value
 
   schema_registry_cluster {
@@ -93,7 +93,7 @@ module "inferred_schemas" {
   source      = "github.com/akrishnanDG/terraform-schema-infer"
   config_file = "${path.module}/cc-config.yaml"
   topics      = ["orders", "payments", "users"]
-  format      = "avro"
+  format      = "json-schema"
 }
 ```
 
@@ -102,7 +102,7 @@ module "inferred_schemas" {
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `topics` | Yes | - | List of Confluent Cloud Kafka topic names to infer schemas from |
-| `format` | No | `avro` | Output format: `avro`, `protobuf`, or `json-schema` |
+| `format` | No | `avro` | Output format: `avro`, `protobuf`, or `json-schema`. Use `json-schema` for unserialized JSON messages |
 | `max_messages` | No | `100` | Maximum messages to sample per topic |
 | `config_file` | No | `""` | Path to Confluent Cloud YAML config file (Option B) |
 | `bootstrap_servers` | No | `""` | Confluent Cloud bootstrap servers (Option A) |
@@ -128,12 +128,12 @@ module "inferred_schemas" {
   kafka_api_secret  = var.kafka_api_secret
 
   topics = ["orders"]
-  format = "avro"
+  format = "json-schema"
 }
 
 resource "confluent_schema" "orders" {
   subject_name = "orders-value"
-  format       = "AVRO"
+  format       = "JSON"
   schema       = module.inferred_schemas.schemas["orders"]
   # ... cluster config, credentials
 }
@@ -154,14 +154,14 @@ module "inferred_schemas" {
   kafka_api_secret  = var.kafka_api_secret
 
   topics       = local.topics
-  format       = "avro"
+  format       = "json-schema"
   max_messages = 100
 }
 
 resource "confluent_schema" "inferred" {
   for_each     = module.inferred_schemas.schemas
   subject_name = "${each.key}-value"
-  format       = "AVRO"
+  format       = "JSON"
   schema       = each.value
   # ... cluster config, credentials
 }
@@ -237,16 +237,16 @@ Generate schemas into a directory, review them, then register with Terraform.
 **Step 1: Generate schema files**
 
 ```bash
-# Generate Avro schemas for specific topics
+# Generate JSON schemas for specific topics
 schema-infer --config cc-config.yaml infer \
   --topics "orders,payments,users" \
-  --format avro \
+  --format json-schema \
   --output-dir ./schemas/
 
 # Or generate for all topics matching a pattern
 schema-infer --config cc-config.yaml infer \
   --topic-pattern ".*" \
-  --format avro \
+  --format json-schema \
   --output-dir ./schemas/ \
   --exclude-internal
 ```
@@ -255,34 +255,34 @@ This produces files like:
 
 ```
 schemas/
-  orders.avsc
-  payments.avsc
-  users.avsc
+  orders.json
+  payments.json
+  users.json
 ```
 
 **Step 2: Review the generated schemas** (optional but recommended)
 
 ```bash
 # Inspect a generated schema
-cat schemas/orders.avsc | python3 -m json.tool
+cat schemas/orders.json | python3 -m json.tool
 ```
 
 **Step 3: Register with Terraform**
 
 ```hcl
 locals {
-  # Automatically discover all .avsc files in the schemas directory
-  schema_files = fileset("${path.module}/schemas", "*.avsc")
+  # Automatically discover all .json files in the schemas directory
+  schema_files = fileset("${path.module}/schemas", "*.json")
   topic_schemas = {
     for f in local.schema_files :
-    trimsuffix(f, ".avsc") => file("${path.module}/schemas/${f}")
+    trimsuffix(f, ".json") => file("${path.module}/schemas/${f}")
   }
 }
 
 resource "confluent_schema" "inferred" {
   for_each     = local.topic_schemas
   subject_name = "${each.key}-value"
-  format       = "AVRO"
+  format       = "JSON"
   schema       = each.value
 
   schema_registry_cluster {
@@ -313,7 +313,7 @@ Use `watch` mode to automatically detect new topics and generate schema files. A
 │  (runs continuously as a service)   │
 │                                     │
 │  Detects new topics, infers schemas │
-│  Writes .avsc files to ./schemas/   │
+│  Writes .json files to ./schemas/   │
 └──────────────┬──────────────────────┘
                │ new schema files
                ▼
@@ -334,29 +334,29 @@ Use `watch` mode to automatically detect new topics and generate schema files. A
 ```bash
 schema-infer --config cc-config.yaml watch \
   --topic-pattern ".*" \
-  --format avro \
+  --format json-schema \
   --output-dir ./schemas/ \
   --interval 60 \
   --exclude-internal
 ```
 
-Watch mode polls the cluster every 60 seconds, detects new topics, infers their schemas, and writes `.avsc` files. Each topic is only processed once.
+Watch mode polls the cluster every 60 seconds, detects new topics, infers their schemas, and writes `.json` files. Each topic is only processed once.
 
 **Terraform config reads whatever files exist:**
 
 ```hcl
 locals {
-  schema_files = fileset("${path.module}/schemas", "*.avsc")
+  schema_files = fileset("${path.module}/schemas", "*.json")
   topic_schemas = {
     for f in local.schema_files :
-    trimsuffix(f, ".avsc") => file("${path.module}/schemas/${f}")
+    trimsuffix(f, ".json") => file("${path.module}/schemas/${f}")
   }
 }
 
 resource "confluent_schema" "watched" {
   for_each     = local.topic_schemas
   subject_name = "${each.key}-value"
-  format       = "AVRO"
+  format       = "JSON"
   schema       = each.value
   # ... cluster config, credentials
 }
@@ -375,7 +375,7 @@ Use `live` mode to continuously consume messages, detect schema evolution (new f
 │                                     │
 │  Consumes new messages              │
 │  Detects schema changes             │
-│  Overwrites .avsc files on change   │
+│  Overwrites .json files on change   │
 └──────────────┬──────────────────────┘
                │ updated schema files
                ▼
@@ -396,7 +396,7 @@ Use `live` mode to continuously consume messages, detect schema evolution (new f
 ```bash
 schema-infer --config cc-config.yaml live \
   --topics "orders,payments,users" \
-  --format avro \
+  --format json-schema \
   --output-dir ./schemas/ \
   --batch-size 200 \
   --batch-timeout 60
@@ -407,12 +407,12 @@ Or monitor all topics by pattern:
 ```bash
 schema-infer --config cc-config.yaml live \
   --topic-pattern ".*" \
-  --format avro \
+  --format json-schema \
   --output-dir ./schemas/ \
   --exclude-internal
 ```
 
-Live mode continuously reads new messages, incrementally builds schemas, and detects structural changes (new fields, type changes, nullability changes). When a schema evolves, it overwrites the corresponding `.avsc` file.
+Live mode continuously reads new messages, incrementally builds schemas, and detects structural changes (new fields, type changes, nullability changes). When a schema evolves, it overwrites the corresponding `.json` file.
 
 **CI/CD pipeline example (GitHub Actions):**
 
@@ -421,7 +421,7 @@ name: Register Schemas
 on:
   push:
     paths:
-      - 'schemas/*.avsc'
+      - 'schemas/*.json'
 
 jobs:
   register:

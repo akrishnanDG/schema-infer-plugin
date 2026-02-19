@@ -8,7 +8,7 @@ This guide covers how to use the Schema Inference Plugin to bootstrap schemas fo
 
 Tableflow uses Confluent Cloud Schema Registry as the source of truth for defining table structure. **If a topic doesn't have a schema registered, Tableflow can't materialize it into a table.**
 
-Many Kafka topics are created without schemas -- producers write raw JSON, CSV, or other formats directly. Schema inference bridges this gap:
+Many Kafka topics are created without schemas -- producers write raw JSON, CSV, or other formats directly. For topics with unserialized JSON messages, use `json-schema` as the output format since it matches the data already on the wire. Schema inference bridges this gap:
 
 ```
 Schemaless Kafka topics
@@ -35,15 +35,15 @@ Schemaless Kafka topics
 ```bash
 # Single topic
 schema-infer --config cc-config.yaml infer \
-  --topic orders --format avro --register
+  --topic orders --format json-schema --register
 
 # Multiple topics
 schema-infer --config cc-config.yaml infer \
-  --topics "orders,payments,users" --format avro --register
+  --topics "orders,payments,users" --format json-schema --register
 
 # All topics matching a pattern
 schema-infer --config cc-config.yaml infer \
-  --topic-pattern ".*" --format avro --register --exclude-internal
+  --topic-pattern ".*" --format json-schema --register --exclude-internal
 ```
 
 ### Step 2: Enable Tableflow
@@ -96,7 +96,7 @@ module "inferred_schemas" {
   kafka_api_secret  = var.kafka_api_secret
 
   topics       = local.topics
-  format       = "avro"
+  format       = "json-schema"
   max_messages = 100
 }
 
@@ -104,7 +104,7 @@ module "inferred_schemas" {
 resource "confluent_schema" "inferred" {
   for_each     = module.inferred_schemas.schemas
   subject_name = "${each.key}-value"
-  format       = "AVRO"
+  format       = "JSON"
   schema       = each.value
 
   schema_registry_cluster {
@@ -154,18 +154,18 @@ Generate schemas separately (with human review), then register and enable Tablef
 # Generate schema files
 schema-infer --config cc-config.yaml infer \
   --topics "orders,payments,users" \
-  --format avro --output-dir ./schemas/
+  --format json-schema --output-dir ./schemas/
 
 # Review generated schemas before applying
-cat schemas/orders.avsc | python3 -m json.tool
+cat schemas/orders.json | python3 -m json.tool
 ```
 
 ```hcl
 locals {
-  schema_files = fileset("${path.module}/schemas", "*.avsc")
+  schema_files = fileset("${path.module}/schemas", "*.json")
   topic_schemas = {
     for f in local.schema_files :
-    trimsuffix(f, ".avsc") => file("${path.module}/schemas/${f}")
+    trimsuffix(f, ".json") => file("${path.module}/schemas/${f}")
   }
 }
 
@@ -173,7 +173,7 @@ locals {
 resource "confluent_schema" "inferred" {
   for_each     = local.topic_schemas
   subject_name = "${each.key}-value"
-  format       = "AVRO"
+  format       = "JSON"
   schema       = each.value
 
   schema_registry_cluster {
@@ -224,7 +224,7 @@ Use `live` mode to continuously detect schema evolution. When schemas change, Te
 │  (runs continuously)                │
 │                                     │
 │  Detects schema changes             │
-│  Updates .avsc files                │
+│  Updates .json files                │
 └──────────────┬──────────────────────┘
                │ updated schema files
                ▼
@@ -241,11 +241,11 @@ Use `live` mode to continuously detect schema evolution. When schemas change, Te
 # Run live mode to track schema evolution
 schema-infer --config cc-config.yaml live \
   --topics "orders,payments,users" \
-  --format avro \
+  --format json-schema \
   --output-dir ./schemas/
 ```
 
-When live mode detects a new field or type change, it overwrites the `.avsc` file. A CI/CD pipeline triggers `terraform apply`, which updates the schema in Schema Registry. Tableflow automatically reflects the updated table structure.
+When live mode detects a new field or type change, it overwrites the `.json` file. A CI/CD pipeline triggers `terraform apply`, which updates the schema in Schema Registry. Tableflow automatically reflects the updated table structure.
 
 ## Tableflow Configuration Options
 
@@ -268,9 +268,9 @@ Tableflow supports all three schema formats that schema-infer generates:
 |--------|-------------------|----------|
 | **Avro** | Full support | Most Kafka-native use cases, best Schema Registry integration |
 | **Protobuf** | Full support | High-performance applications, cross-language compatibility |
-| **JSON Schema** | Full support | Web APIs, human-readable schemas |
+| **JSON Schema** | Full support | Unserialized JSON messages, web APIs, human-readable schemas |
 
-Avro is recommended for Tableflow because it has the strongest schema evolution guarantees and is the most widely used format with Confluent Cloud.
+Use **JSON Schema** when your topics contain unserialized JSON messages (raw JSON produced without a schema serializer). Since the data is already plain JSON on the wire, JSON Schema is the natural fit -- it describes the structure without requiring producers to change serialization. Avro and Protobuf are better suited for topics where producers already use those serialization formats.
 
 ## Verification Checklist
 
