@@ -40,7 +40,7 @@ class KafkaConsumer:
                 "session.timeout.ms": self.config.kafka.session_timeout_ms,
                 "heartbeat.interval.ms": self.config.kafka.heartbeat_interval_ms,
                 # Reduce verbose logging from Kafka client
-                "log_level": "7",  # Only show critical messages
+                "log_level": "3",  # Only show critical/error messages
                 "log.connection.close": "false",
                 "log.thread.name": "false",
                 "broker.address.family": "v4",

@@ -11,8 +11,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
 # Suppress librdkafka telemetry messages
-os.environ['KAFKA_LOG_LEVEL'] = '7'
-os.environ['RDKAFKA_LOG_LEVEL'] = '7'
+os.environ['KAFKA_LOG_LEVEL'] = '3'
+os.environ['RDKAFKA_LOG_LEVEL'] = '3'
 
 import confluent_kafka
 from confluent_kafka import Consumer, KafkaError as ConfluentKafkaError, KafkaException
@@ -27,8 +27,8 @@ class SuppressTelemetry:
     """Context manager to suppress librdkafka telemetry messages."""
 
     def __enter__(self):
-        os.environ['KAFKA_LOG_LEVEL'] = '7'
-        os.environ['RDKAFKA_LOG_LEVEL'] = '7'
+        os.environ['KAFKA_LOG_LEVEL'] = '3'
+        os.environ['RDKAFKA_LOG_LEVEL'] = '3'
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -64,7 +64,7 @@ class OptimisticProcessor:
         """Create a consumer with suppressed librdkafka logging."""
 
         # Set log level to suppress most messages
-        consumer_config.setdefault('log_level', '7')
+        consumer_config.setdefault('log_level', '3')
         consumer_config.setdefault('log.connection.close', 'false')
         consumer_config.setdefault('log.thread.name', 'false')
         consumer_config.setdefault('broker.address.family', 'v4')
@@ -86,7 +86,7 @@ class OptimisticProcessor:
                     'auto.offset.reset': self.config.kafka.auto_offset_reset,
                     'session.timeout.ms': 15000,
                     'heartbeat.interval.ms': 5000,
-                    'log_level': '7',
+                    'log_level': '3',
                     'log.connection.close': 'false',
                     'log.thread.name': 'false',
                     'broker.address.family': 'v4',
@@ -188,7 +188,7 @@ class OptimisticProcessor:
                 'fetch.min.bytes': 10240,
                 'queued.min.messages': 2000,
                 'queued.max.messages.kbytes': 65536,
-                'log_level': '7',
+                'log_level': '3',
                 'log.connection.close': 'false',
                 'log.thread.name': 'false',
                 'broker.address.family': 'v4',
@@ -278,12 +278,13 @@ class OptimisticProcessor:
         got_first_message = False
 
         while len(messages) < max_messages and time.time() - poll_start < timeout:
-            msg = consumer.poll(0.1)
+            msg = consumer.poll(0.5)
             if msg is None:
                 consecutive_empty += 1
-                # Be patient before first message (broker fetch prep on Confluent Cloud)
-                limit = 20 if got_first_message else 50
-                if consecutive_empty >= limit:
+                # After first message, stop quickly on silence (topic fully read)
+                # Before first message, rely on the outer timeout loop — Confluent
+                # Cloud can take 10-15s to set up a fetch session after assign/seek
+                if got_first_message and consecutive_empty >= 10:
                     break
                 continue
 
@@ -431,7 +432,7 @@ class OptimisticProcessor:
                 'session.timeout.ms': 3000,  # Shorter timeout
                 'heartbeat.interval.ms': 1000,
                 'broker.address.family': 'v4',
-                'log_level': '7',  # Suppress logs
+                'log_level': '3',  # Suppress logs
             }
 
             # Get authentication configuration
@@ -489,7 +490,7 @@ class OptimisticProcessor:
                 'session.timeout.ms': 3000,  # Shorter timeout
                 'heartbeat.interval.ms': 1000,
                 'broker.address.family': 'v4',
-                'log_level': '7',  # Suppress logs
+                'log_level': '3',  # Suppress logs
             }
 
             # Get authentication configuration
@@ -761,7 +762,7 @@ class OptimisticProcessor:
                 'auto.offset.reset': self.config.kafka.auto_offset_reset,
                 'session.timeout.ms': 15000,  # Balanced for reliability
                 'heartbeat.interval.ms': 5000,  # Balanced for reliability
-                'log_level': '7',
+                'log_level': '3',
                 'statistics.interval.ms': '0',  # Disable statistics to reduce telemetry
                 'enable.auto.commit': 'false',  # Disable auto-commit telemetry
                 'enable.partition.eof': 'false',  # Disable EOF telemetry
@@ -1041,7 +1042,7 @@ class OptimisticProcessor:
             'enable.auto.commit': False,  # Disable auto-commit for better control
             'session.timeout.ms': 20000,  # Stable session timeout
             'heartbeat.interval.ms': 6000,  # Stable heartbeat interval
-            'log_level': '7',
+            'log_level': '3',
             'log.connection.close': 'false',
             'log.thread.name': 'false',
             'broker.address.family': 'v4',

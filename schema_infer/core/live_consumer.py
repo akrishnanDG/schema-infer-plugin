@@ -17,8 +17,8 @@ import time
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-os.environ.setdefault("KAFKA_LOG_LEVEL", "7")
-os.environ.setdefault("RDKAFKA_LOG_LEVEL", "7")
+os.environ.setdefault("KAFKA_LOG_LEVEL", "3")
+os.environ.setdefault("RDKAFKA_LOG_LEVEL", "3")
 
 from confluent_kafka import Consumer, KafkaError as ConfluentKafkaError, KafkaException
 
@@ -75,7 +75,7 @@ class LiveConsumer:
                 "queued.max.messages.kbytes": 65536,  # 64MB
                 "fetch.wait.max.ms": 100,
                 # Suppress librdkafka noise
-                "log_level": "7",
+                "log_level": "3",
                 "log.connection.close": "false",
                 "log.thread.name": "false",
                 "broker.address.family": "v4",

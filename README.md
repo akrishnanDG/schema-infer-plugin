@@ -58,14 +58,18 @@ schema-infer --help
 ### Basic Usage
 
 ```bash
-# Generate JSON Schema from a topic
-schema-infer infer --topic user-events --output user-schema.json --format json-schema
+# Generate JSON Schema from a topic (json-schema is the default format)
+schema-infer infer --topic user-events --output user-schema.json
 
-# Generate Avro schema and register in Schema Registry
-schema-infer infer --topic user-events --format avro --register
+# Generate schema and register in Schema Registry
+schema-infer infer --topic user-events --register
 
 # Process multiple topics
-schema-infer infer --topics "user-events,order-events,payment-events" --output-dir schemas/ --format avro
+schema-infer infer --topics "user-events,order-events,payment-events" --output-dir schemas/
+
+# Generate Avro or Protobuf instead
+schema-infer infer --topic user-events --format avro --register
+schema-infer infer --topic user-events --format protobuf --output user-schema.proto
 ```
 
 ## ⚙️ Configuration
@@ -125,11 +129,11 @@ schema-infer infer --topic-pattern ".*-events" --format json-schema
 
 ### Schema Registry Integration
 ```bash
-# Register schema automatically
-schema-infer infer --topic user-events --format avro --register
+# Register schema automatically (default: json-schema)
+schema-infer infer --topic user-events --register
 
 # Register all topics under a Schema Registry context
-schema-infer infer --topic-pattern ".*" --format avro --register --context my-context --exclude-internal
+schema-infer infer --topic-pattern ".*" --register --context my-context --exclude-internal
 
 # Configure compatibility levels
 # In config.yaml:

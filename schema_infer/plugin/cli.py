@@ -10,8 +10,8 @@ import time
 from pathlib import Path
 from typing import List, Optional, Set
 
-os.environ['KAFKA_LOG_LEVEL'] = '7'
-os.environ['RDKAFKA_LOG_LEVEL'] = '7'
+os.environ['KAFKA_LOG_LEVEL'] = '3'
+os.environ['RDKAFKA_LOG_LEVEL'] = '3'
 
 import click
 
@@ -121,8 +121,8 @@ def main(
     "--format",
     "-f",
     type=click.Choice(["avro", "protobuf", "json-schema"]),
-    default="avro",
-    help="📋 Output schema format (default: avro)",
+    default="json-schema",
+    help="📋 Output schema format (default: json-schema)",
 )
 @click.option(
     "--output",
@@ -330,7 +330,7 @@ def infer(
 
             # Reader pool: small fixed number of consumer connections
             # to avoid broker saturation (independent of processing workers)
-            num_readers = min(5, len(topic_list))
+            num_readers = min(10, len(topic_list))
 
             progress_bar = tqdm(
                 total=len(topic_list),
@@ -968,8 +968,8 @@ def version() -> None:
 @click.option(
     "--format", "-f",
     type=click.Choice(["avro", "protobuf", "json-schema"]),
-    default="avro",
-    help="Output schema format (default: avro)",
+    default="json-schema",
+    help="Output schema format (default: json-schema)",
 )
 @click.option(
     "--output-dir",
@@ -1162,8 +1162,8 @@ def watch(
     "--format",
     "-f",
     type=click.Choice(["avro", "protobuf", "json-schema"]),
-    default="avro",
-    help="Output schema format (default: avro)",
+    default="json-schema",
+    help="Output schema format (default: json-schema)",
 )
 @click.option(
     "--output-dir",
