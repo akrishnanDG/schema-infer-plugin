@@ -7,32 +7,32 @@
 
 A powerful CLI plugin that automatically infers and generates schemas from Kafka topic data. Supports multiple schema formats (JSON Schema, Avro, Protobuf) and handles complex nested data structures with comprehensive data type detection.
 
-## 🚀 Features
+## Features
 
-- **🎯 Multi-Format Schema Generation**: JSON Schema, Avro, and Protobuf
-- **🔍 Intelligent Data Analysis**: Automatic format detection, datetime/enum inference, and deep nested analysis
-- **⚡ High Performance**: Parallel processing and optimized message reading
-- **🎛️ Flexible Topic Discovery**: Single topics, multiple topics, prefix/pattern matching
-- **🔐 Enterprise Security**: Full Schema Inference Cloud and Platform authentication support
-- **📊 Schema Registry Integration**: Automatic registration with compatibility management
-- **🛡️ Production Ready**: Schema validation, retry logic, and comprehensive error handling
-- **👁️ Continuous Monitoring**: Watch mode for automatic schema inference on new topics
-- **🔴 Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas
-- **📈 Horizontal Scaling**: Multi-instance support with shared consumer groups for 1000+ topics
+- **Multi-Format Schema Generation**: JSON Schema, Avro, and Protobuf
+- **Intelligent Data Analysis**: Automatic format detection, datetime/enum inference, and deep nested analysis
+- **High Performance**: Parallel processing and optimized message reading
+- **Flexible Topic Discovery**: Single topics, multiple topics, prefix/pattern matching
+- **Enterprise Security**: Full Confluent Cloud and Platform authentication support
+- **Schema Registry Integration**: Automatic registration with compatibility management
+- **Production Ready**: Schema validation, retry logic, and comprehensive error handling
+- **Continuous Monitoring**: Watch mode for automatic schema inference on new topics
+- **Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas
+- **Horizontal Scaling**: Multi-instance support with shared consumer groups for 1000+ topics
 
-## 📖 Documentation
+## Documentation
 
 | Document | Description |
 |----------|-------------|
-| **[📚 Complete Documentation](DOCUMENTATION.md)** | Comprehensive product documentation with all features |
-| **[⚡ Quick Start Guide](QUICK_START.md)** | Get up and running in minutes |
-| **[🔧 API Reference](API_REFERENCE.md)** | Complete API documentation and class references |
-| **[💡 Examples](EXAMPLES.md)** | Comprehensive examples for all use cases |
-| **[🧪 Testing Guide](TESTING.md)** | Testing documentation and examples |
-| **[🔧 Using with Terraform](TERRAFORM.md)** | Terraform module integration guide |
-| **[📊 Using with Tableflow](TABLEFLOW.md)** | Materialize topics as Iceberg/Delta tables |
+| **[Complete Documentation](DOCUMENTATION.md)** | Comprehensive product documentation with all features |
+| **[Quick Start Guide](QUICK_START.md)** | Get up and running in minutes |
+| **[API Reference](API_REFERENCE.md)** | Complete API documentation and class references |
+| **[Examples](EXAMPLES.md)** | Comprehensive examples for all use cases |
+| **[Testing Guide](TESTING.md)** | Testing documentation and examples |
+| **[Using with Terraform](TERRAFORM.md)** | Terraform module integration guide |
+| **[Using with Tableflow](TABLEFLOW.md)** | Materialize topics as Iceberg/Delta tables |
 
-## 🏃‍♂️ Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -72,7 +72,7 @@ schema-infer infer --topic user-events --format avro --register
 schema-infer infer --topic user-events --format protobuf --output user-schema.proto
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 Create a YAML configuration file:
 
@@ -93,7 +93,7 @@ performance:
   verbose_logging: false
 ```
 
-## 🎯 Supported Formats
+## Supported Formats
 
 ### Input Data Formats
 - **JSON**: Automatic JSON parsing with nested object support
@@ -113,7 +113,7 @@ performance:
 - **Avro**: Apache Avro with nested record structures
 - **Protobuf**: Protocol Buffers with nested message definitions
 
-## 🔧 Advanced Features
+## Advanced Features
 
 ### Topic Discovery
 ```bash
@@ -144,7 +144,7 @@ schema_registry:
 
 ### Watch Mode (New Topic Detection)
 ```bash
-# Watch for new topics and auto-register Avro schemas
+# Watch for new topics and auto-register schemas
 schema-infer --config config.yaml watch --register --context production
 
 # Custom interval and format
@@ -193,25 +193,25 @@ performance:
   enable_caching: true
 ```
 
-## ☁️ Schema Inference Cloud Setup
+## Confluent Cloud Setup
 
 ```yaml
 kafka:
-  bootstrap_servers: "pkc-xxxxx.us-west-2.aws.schema-infer.cloud:9092"
+  bootstrap_servers: "pkc-xxxxx.us-west-2.aws.confluent.cloud:9092"
   security_protocol: "SASL_SSL"
   sasl_mechanism: "PLAIN"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 
 schema_registry:
-  url: "https://psrc-xxxxx.us-west-2.aws.schema-infer.cloud"
+  url: "https://psrc-xxxxx.us-west-2.aws.confluent.cloud"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 ```
 
 **Note**: API keys and secrets are read directly from the YAML configuration file, not from environment variables.
 
-## 🏢 Schema Inference Platform Setup
+## Confluent Platform Setup
 
 ```yaml
 kafka:
@@ -388,15 +388,15 @@ resource "confluent_tableflow_topic" "materialized" {
 
 For the full guide including live mode, file-based approach, and troubleshooting, see [TABLEFLOW.md](TABLEFLOW.md).
 
-## 💼 Use Cases
+## Use Cases
 
-- **🔄 Schema Migration**: Migrate from untyped to typed data systems
-- **📚 API Documentation**: Generate schemas for API documentation
-- **🛡️ Data Governance**: Establish data contracts and validation rules
-- **⚡ Development Acceleration**: Quickly bootstrap schema definitions
-- **📋 Compliance**: Meet data governance and compliance requirements
+- **Schema Migration**: Migrate from untyped to typed data systems
+- **API Documentation**: Generate schemas for API documentation
+- **Data Governance**: Establish data contracts and validation rules
+- **Development Acceleration**: Quickly bootstrap schema definitions
+- **Compliance**: Meet data governance and compliance requirements
 
-## 📊 Examples
+## Examples
 
 ### E-commerce Platform
 ```bash
@@ -422,16 +422,16 @@ schema-infer infer --topics "user-service,order-service,payment-service" --forma
 schema-infer infer --topic-pattern ".*-api" --format json-schema --output-dir api-docs/
 ```
 
-## ⚡ Performance Features
+## Performance Features
 
-- **🔄 Parallel Processing**: Multi-threaded topic processing for message reading, schema generation, and schema registration
-- **📈 Optimized Message Reading**: Smart offset selection and batch processing
-- **🔗 Connection Reuse**: Efficient Kafka consumer management
-- **📊 Progress Tracking**: Real-time progress bars and ETA
-- **💾 Memory Management**: Configurable memory limits and streaming processing
-- **📤 Parallel Schema Registration**: Concurrent schema registration to Schema Registry using configurable worker threads (controlled by `max_workers`)
+- **Parallel Processing**: Multi-threaded topic processing for message reading, schema generation, and schema registration
+- **Optimized Message Reading**: Smart offset selection and batch processing
+- **Connection Reuse**: Efficient Kafka consumer management
+- **Progress Tracking**: Real-time progress bars and ETA
+- **Memory Management**: Configurable memory limits and streaming processing
+- **Parallel Schema Registration**: Concurrent schema registration to Schema Registry using configurable worker threads (controlled by `max_workers`)
 
-## 🎛️ Configuration Options
+## Configuration Options
 
 ### Topic Filtering
 ```yaml
@@ -445,7 +445,7 @@ topic_filter:
 ### Performance Tuning
 ```yaml
 performance:
-  max_workers: 8          # Worker threads for parallel message reading, schema generation, and registration
+  max_workers: 8          # Worker threads for parallel schema generation and registration
   batch_size: 100
   memory_limit_mb: 512
   enable_caching: true
@@ -475,7 +475,7 @@ live:
   on_incompatible: "skip"               # skip, log, force, or fail
 ```
 
-## 🧪 Testing
+## Testing
 
 The plugin includes comprehensive unit tests covering all functionality:
 
@@ -493,15 +493,15 @@ python run_tests.py --type core
 python run_tests.py --coverage
 ```
 
-## 🆘 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
-1. **🔌 Connection Issues**: Check bootstrap servers and authentication
-2. **📋 Schema Registry Issues**: Verify URL and credentials
-3. **⚡ Performance Issues**: Adjust timeout and worker settings
-4. **💾 Memory Issues**: Increase memory limits or reduce batch sizes
-5. **📭 Empty Topics**: When processing many topics, some may appear empty due to broker connection timeouts. The `infer` command uses a small reader pool (5 consumer connections) separate from the processing worker pool to avoid connection saturation. If you still see empty topics, try increasing `--timeout` to give readers more time per topic.
+1. **Connection Issues**: Check bootstrap servers and authentication
+2. **Schema Registry Issues**: Verify URL and credentials
+3. **Performance Issues**: Adjust timeout and worker settings
+4. **Memory Issues**: Increase memory limits or reduce batch sizes
+5. **Empty Topics**: When processing many topics, some may appear empty due to broker connection timeouts. The `infer` command uses a small reader pool (10 consumer connections) separate from the processing worker pool to avoid connection saturation. If you still see empty topics, try increasing `--timeout` to give readers more time per topic.
 
 ### Debug Mode
 
@@ -512,7 +512,7 @@ performance:
   verbose_logging: true
 ```
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -520,16 +520,16 @@ performance:
 4. Add tests
 5. Submit a pull request
 
-## 📄 License
+## License
 
 Apache License 2.0
 
-## 🆘 Support
+## Support
 
-- **📚 Documentation**: [Complete Documentation](DOCUMENTATION.md)
-- **🐛 Issues**: [GitHub Issues](https://github.com/akrishnanDG/schema-infer-plugin/issues)
-- **💬 Discussions**: [GitHub Discussions](https://github.com/akrishnanDG/schema-infer-plugin/discussions)
-- **🏢 Schema Inference Support**: This is an open source tool, there is no support provided but please feel free to raise and fix issues.
+- **Documentation**: [Complete Documentation](DOCUMENTATION.md)
+- **Issues**: [GitHub Issues](https://github.com/akrishnanDG/schema-infer-plugin/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/akrishnanDG/schema-infer-plugin/discussions)
+- **Support**: This is an open source tool, there is no support provided but please feel free to raise and fix issues.
 
 ---
 
