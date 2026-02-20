@@ -93,6 +93,8 @@ class LiveModeOrchestrator:
         self._states: Dict[str, IncrementalSchemaState] = {}
         self._states_lock = threading.Lock()
         self._topic_formats: Dict[str, str] = {}  # Cached detected format per topic
+        self._topic_discriminators: Dict[str, Optional[str]] = {}  # Cached discriminator per topic
+        self._topic_event_types: Dict[str, Set[str]] = {}  # Known event types per topic
         self._topic_last_activity: Dict[str, float] = {}
         self._shutdown = False
 
@@ -320,23 +322,51 @@ class LiveModeOrchestrator:
         topic_name: str,
         messages: List[Tuple[Optional[bytes], bytes]],
     ) -> None:
-        """Process a batch of messages for a single topic."""
+        """Process a batch of messages for a single topic.
+
+        Handles both flat and multi-event topics. On the first batch,
+        auto-detects if the topic has a discriminator field. If so,
+        splits records by event type and maintains per-type states.
+        """
         with self._stats_lock:
             self._total_messages += len(messages)
         self._topic_last_activity[topic_name] = time.time()
-
-        # Get or create state
-        state = self._get_or_create_state(topic_name)
 
         # Parse messages
         parsed_records = self._parse_messages(topic_name, messages)
         if not parsed_records:
             return
 
-        # Merge into state
-        new_schema = state.merge_batch(parsed_records)
+        # Detect discriminator on first batch (cache result)
+        if topic_name not in self._topic_discriminators:
+            from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
+            analyzer = SchemaAnalyzer(
+                confidence_threshold=self.config.inference.confidence_threshold,
+                max_depth=self.config.inference.max_depth,
+            )
+            disc = analyzer.detect_discriminator(parsed_records)
+            self._topic_discriminators[topic_name] = disc
+            if disc:
+                self._topic_event_types[topic_name] = set()
+                click.echo(f"[{_ts()}] {topic_name}: Detected discriminator field '{disc}'")
 
-        # Detect changes
+        discriminator = self._topic_discriminators[topic_name]
+
+        if discriminator:
+            # Multi-event: split records by event type
+            self._process_multi_event_batch(topic_name, parsed_records, discriminator)
+        else:
+            # Flat: single state per topic (original behavior)
+            self._process_flat_batch(topic_name, parsed_records)
+
+    def _process_flat_batch(
+        self,
+        topic_name: str,
+        parsed_records: List[Dict[str, Any]],
+    ) -> None:
+        """Process a batch as a flat (single event type) topic."""
+        state = self._get_or_create_state(topic_name)
+        new_schema = state.merge_batch(parsed_records)
         report = state.detect_changes(new_schema)
 
         if report is not None and report.has_changes:
@@ -357,7 +387,6 @@ class LiveModeOrchestrator:
                 )
                 click.echo(report.summary())
 
-            # Register if we have enough records
             if (
                 self.register
                 and self.registry
@@ -375,16 +404,170 @@ class LiveModeOrchestrator:
                     f"({state.total_records_processed} so far)"
                 )
 
-            # Write schema file if output_dir specified
             if self.output_dir:
                 self._write_schema_file(topic_name, new_schema)
         else:
-            # No changes -- only log for small topic sets
             if len(self.topics) <= 10:
                 click.echo(
                     f"[{_ts()}] {topic_name}: Processed {len(parsed_records)} messages "
                     f"(total: {state.total_records_processed}). No schema changes."
                 )
+
+    def _process_multi_event_batch(
+        self,
+        topic_name: str,
+        parsed_records: List[Dict[str, Any]],
+        discriminator: str,
+    ) -> None:
+        """Process a batch for a multi-event topic.
+
+        Splits records by discriminator value, maintains per-type states,
+        and registers sub-schemas + main oneOf schema.
+        """
+        # Group records by event type
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        for record in parsed_records:
+            event_type = str(record.get(discriminator, "_unknown"))
+            if event_type not in groups:
+                groups[event_type] = []
+            groups[event_type].append(record)
+
+        any_changes = False
+        new_event_type_discovered = False
+        known_types = self._topic_event_types.get(topic_name, set())
+
+        for event_type, records in groups.items():
+            # State key: topic:event_type
+            state_key = f"{topic_name}:{event_type}"
+            state = self._get_or_create_state(state_key)
+
+            new_schema = state.merge_batch(records)
+            report = state.detect_changes(new_schema)
+
+            if event_type not in known_types:
+                known_types.add(event_type)
+                new_event_type_discovered = True
+                click.echo(
+                    f"[{_ts()}] {topic_name}/{event_type}: New event type discovered "
+                    f"({len(records)} records, {len(new_schema.fields)} fields)"
+                )
+
+            if report is not None and report.has_changes:
+                any_changes = True
+                click.echo(
+                    f"[{_ts()}] {topic_name}/{event_type}: Schema change detected "
+                    f"({len(records)} records, total: {state.total_records_processed})"
+                )
+                click.echo(report.summary())
+
+                if self.output_dir:
+                    self._write_schema_file(f"{topic_name}.{event_type}", new_schema)
+
+        self._topic_event_types[topic_name] = known_types
+
+        # Register if changes detected or new event type appeared
+        if (any_changes or new_event_type_discovered) and self.register and self.registry:
+            self._handle_multi_event_registration(topic_name, discriminator)
+
+    def _handle_multi_event_registration(
+        self,
+        topic_name: str,
+        discriminator: str,
+    ) -> None:
+        """Generate and register multi-event schemas (sub-schemas + main oneOf)."""
+        from ..core.inferrer import SchemaInferrer
+        from ..schemas.generators import JSONSchemaGenerator
+        from ..core.merger import SchemaMerger
+
+        inferrer = SchemaInferrer(self.config)
+        json_gen = JSONSchemaGenerator()
+        merger = SchemaMerger()
+
+        event_types = sorted(self._topic_event_types.get(topic_name, set()))
+        if len(event_types) < 2:
+            return
+
+        # Build sub-schemas from per-type states
+        event_schema_objs = {}
+        for event_type in event_types:
+            state_key = f"{topic_name}:{event_type}"
+            with self._states_lock:
+                state = self._states.get(state_key)
+            if state and state.last_schema:
+                event_schema_objs[event_type] = state.last_schema
+
+        if not event_schema_objs:
+            return
+
+        # Generate schema files
+        schema_files = json_gen.generate_multi_event(
+            topic_name, event_schema_objs, discriminator
+        )
+
+        sub_contents = {
+            et: schema_files[f"{topic_name}.{et}"]
+            for et in event_types
+            if f"{topic_name}.{et}" in schema_files
+        }
+        main_content = schema_files.get(topic_name, "")
+
+        # Merge with existing SR schemas
+        try:
+            main_subject = self.registry._generate_subject_name(
+                topic_name, self.schema_format
+            )
+            existing_main = self.registry.get_latest_schema(main_subject)
+            if existing_main and "schema" in existing_main:
+                import json
+                existing_et = set()
+                try:
+                    em = json.loads(existing_main["schema"])
+                    for ref in em.get("oneOf", []):
+                        rn = ref.get("$ref", "")
+                        if rn.startswith(f"{topic_name}-"):
+                            existing_et.add(rn[len(f"{topic_name}-"):])
+                except Exception:
+                    pass
+
+                existing_sub = merger.fetch_existing_sub_schemas(
+                    self.registry, topic_name,
+                    list(set(event_types) | existing_et)
+                )
+                merged = merger.merge_multi_event_schemas(
+                    existing_main["schema"], sub_contents,
+                    main_content, topic_name, existing_sub
+                )
+                main_content = merged[topic_name]
+                sub_contents = {
+                    et: merged[f"{topic_name}.{et}"]
+                    for et in sorted(set(sub_contents.keys()) | set(existing_sub.keys()))
+                    if f"{topic_name}.{et}" in merged
+                }
+        except Exception:
+            pass
+
+        # Register
+        try:
+            reg_result = self.registry.register_multi_event_schemas(
+                topic_name, sub_contents, main_content, self.schema_format
+            )
+            with self._stats_lock:
+                self._total_registrations += len(reg_result)
+            click.echo(
+                f"[{_ts()}] {topic_name}: Registered {len(reg_result)} multi-event schemas "
+                f"({len(sub_contents)} sub + 1 main)"
+            )
+        except Exception as e:
+            click.echo(
+                f"[{_ts()}] {topic_name}: Multi-event registration failed: {e}",
+                err=True,
+            )
+
+        # Write main schema file
+        if self.output_dir:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            main_file = self.output_dir / f"{topic_name}.json"
+            main_file.write_text(main_content)
 
     def _parse_messages(
         self,
@@ -621,7 +804,10 @@ class LiveModeOrchestrator:
         click.echo(f"[{_ts()}] {topic_name}: Incompatible schema written to {schema_file}")
 
     def _get_or_create_state(self, topic_name: str) -> IncrementalSchemaState:
-        """Get existing state or create/load a new one."""
+        """Get existing state or create/load a new one.
+
+        Priority: in-memory > disk state > Schema Registry seed > empty.
+        """
         with self._states_lock:
             if topic_name in self._states:
                 return self._states[topic_name]
@@ -630,6 +816,21 @@ class LiveModeOrchestrator:
         loaded = None
         if self.state_store:
             loaded = self.state_store.load(topic_name, self.config)
+
+        # If no disk state, try to seed from Schema Registry
+        seeded = None
+        if not loaded and self.registry:
+            try:
+                subject = self.registry._generate_subject_name(
+                    topic_name, self.schema_format
+                )
+                existing = self.registry.get_latest_schema(subject)
+                if existing and "schema" in existing:
+                    seeded = IncrementalSchemaState.seed_from_json_schema(
+                        topic_name, existing["schema"], self.config
+                    )
+            except Exception:
+                pass
 
         with self._states_lock:
             # Double-check after acquiring lock
@@ -641,6 +842,12 @@ class LiveModeOrchestrator:
                 click.echo(
                     f"[{_ts()}] {topic_name}: Resumed from persisted state "
                     f"({loaded.total_records_processed} records)"
+                )
+            elif seeded:
+                self._states[topic_name] = seeded
+                click.echo(
+                    f"[{_ts()}] {topic_name}: Seeded from existing Schema Registry schema "
+                    f"({len(seeded.field_analysis)} fields)"
                 )
             else:
                 self._states[topic_name] = IncrementalSchemaState(

@@ -28,6 +28,21 @@ PLUGIN_VERSION = "1.3.0"
 PLUGIN_BUILD = "2026-02-13"
 
 
+def _extract_event_types(main_schema_json: str, topic_name: str) -> set:
+    """Extract event type names from an existing oneOf main schema."""
+    import json
+    try:
+        schema = json.loads(main_schema_json)
+        types = set()
+        for ref in schema.get("oneOf", []):
+            ref_name = ref.get("$ref", "")
+            if ref_name.startswith(f"{topic_name}-"):
+                types.add(ref_name[len(f"{topic_name}-"):])
+        return types
+    except Exception:
+        return set()
+
+
 @click.group()
 @click.option(
     "--bootstrap-servers",
@@ -435,10 +450,23 @@ def infer(
                         reg_success = 0
                         reg_fail = 0
 
-                        # Register flat schemas in parallel
+                        from ..core.merger import SchemaMerger
+                        merger = SchemaMerger()
+
+                        # Register flat schemas in parallel (with merge)
                         if flat_schemas:
                             def _register_one(topic_name, schema_dict):
                                 schema_content = inferrer.generate_schema(schema_dict, format)
+                                # Merge with existing SR schema
+                                try:
+                                    subject = registry._generate_subject_name(topic_name, format)
+                                    existing = registry.get_latest_schema(subject)
+                                    if existing and "schema" in existing:
+                                        schema_content = merger.merge_flat_schemas(
+                                            existing["schema"], schema_content
+                                        )
+                                except Exception:
+                                    pass
                                 is_valid, validation_error = validate_generated_schema(schema_content, format)
                                 if not is_valid:
                                     return (topic_name, False, f"Generated schema is invalid: {validation_error}")
@@ -479,7 +507,7 @@ def infer(
 
                             reg_progress.close()
 
-                        # Register multi-event schemas (sub-schemas + main with references)
+                        # Register multi-event schemas (with merge)
                         for topic_name, me_result in multi_event_topics.items():
                             try:
                                 schema_files = me_result['schema_files']
@@ -491,13 +519,35 @@ def infer(
                                 }
                                 main_content = schema_files[topic_name]
 
+                                # Merge with existing SR schemas
+                                try:
+                                    main_subject = registry._generate_subject_name(topic_name, format)
+                                    existing_main = registry.get_latest_schema(main_subject)
+                                    if existing_main and "schema" in existing_main:
+                                        existing_sub = merger.fetch_existing_sub_schemas(
+                                            registry, topic_name,
+                                            list(set(event_types) | _extract_event_types(existing_main["schema"], topic_name))
+                                        )
+                                        merged = merger.merge_multi_event_schemas(
+                                            existing_main["schema"], sub_contents,
+                                            main_content, topic_name, existing_sub
+                                        )
+                                        main_content = merged[topic_name]
+                                        sub_contents = {
+                                            et: merged[f"{topic_name}.{et}"]
+                                            for et in sorted(set(sub_contents.keys()) | set(existing_sub.keys()))
+                                            if f"{topic_name}.{et}" in merged
+                                        }
+                                except Exception:
+                                    pass
+
                                 reg_result = registry.register_multi_event_schemas(
                                     topic_name, sub_contents, main_content, format
                                 )
                                 reg_success += len(reg_result)
                                 click.echo(
                                     f"  OK {topic_name}: Registered {len(reg_result)} schemas "
-                                    f"({len(event_types)} sub + 1 main with references)"
+                                    f"({len(sub_contents)} sub + 1 main with references)"
                                 )
                             except Exception as e:
                                 click.echo(f"  FAIL {topic_name}: Multi-event registration failed - {e}", err=True)
@@ -600,20 +650,47 @@ def infer(
                                 schema_file = output_dir / f"{file_key}.json"
                                 schema_file.write_text(content)
 
-                        # Register with references
+                        # Register with references (merge with existing if present)
                         if register and registry:
                             try:
+                                from ..core.merger import SchemaMerger
+                                merger = SchemaMerger()
+
                                 sub_contents = {
                                     et: schema_files[f"{topic_name}.{et}"]
                                     for et in event_types
                                 }
                                 main_content = schema_files[topic_name]
+
+                                # Check for existing main schema and merge
+                                try:
+                                    main_subject = registry._generate_subject_name(topic_name, format)
+                                    existing_main = registry.get_latest_schema(main_subject)
+                                    if existing_main and "schema" in existing_main:
+                                        existing_sub = merger.fetch_existing_sub_schemas(
+                                            registry, topic_name,
+                                            list(set(event_types) | _extract_event_types(existing_main["schema"], topic_name))
+                                        )
+                                        merged = merger.merge_multi_event_schemas(
+                                            existing_main["schema"], sub_contents,
+                                            main_content, topic_name, existing_sub
+                                        )
+                                        # Update with merged results
+                                        main_content = merged[topic_name]
+                                        sub_contents = {
+                                            et: merged[f"{topic_name}.{et}"]
+                                            for et in sorted(set(sub_contents.keys()) | set(existing_sub.keys()))
+                                            if f"{topic_name}.{et}" in merged
+                                        }
+                                except Exception:
+                                    pass  # No existing schema, use new as-is
+
                                 reg_result = registry.register_multi_event_schemas(
                                     topic_name, sub_contents, main_content, format
                                 )
                                 click.echo(
                                     f"  Registered {len(reg_result)} schemas "
-                                    f"({len(event_types)} sub-schemas + 1 main with references)"
+                                    f"({len(sub_contents)} sub-schemas + 1 main with references)"
                                 )
                             except Exception as e:
                                 click.echo(f"  FAIL {topic_name}: Multi-event registration failed - {e}", err=True)
@@ -648,8 +725,21 @@ def infer(
                         # Generate schema in requested format
                         schema_content = inferrer.generate_schema(schema_dict, format)
 
-                        # Output schema
+                        # Output schema (merge with existing if present)
                         if register and registry:
+                            # Merge with existing schema from SR
+                            try:
+                                from ..core.merger import SchemaMerger
+                                subject = registry._generate_subject_name(topic_name, format)
+                                existing = registry.get_latest_schema(subject)
+                                if existing and "schema" in existing:
+                                    merger = SchemaMerger()
+                                    schema_content = merger.merge_flat_schemas(
+                                        existing["schema"], schema_content
+                                    )
+                            except Exception:
+                                pass  # No existing schema or merge failed, use new as-is
+
                             from ..utils.validators import validate_generated_schema
                             is_valid, validation_error = validate_generated_schema(schema_content, format)
                             if not is_valid:

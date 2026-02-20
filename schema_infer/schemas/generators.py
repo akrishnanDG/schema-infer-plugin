@@ -492,7 +492,8 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
             "description": schema.description or f"Auto-generated JSON Schema for {schema.name}",
             "type": "object",
             "properties": {},
-            "required": []
+            "required": [],
+            "additionalProperties": False
         }
         
         # Add namespace as custom property

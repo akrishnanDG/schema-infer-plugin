@@ -98,6 +98,61 @@ class IncrementalSchemaState:
             null_handling=config.inference.null_handling,
         )
 
+    @classmethod
+    def seed_from_json_schema(
+        cls,
+        topic_name: str,
+        schema_json: str,
+        config: Config,
+    ) -> "IncrementalSchemaState":
+        """
+        Create an IncrementalSchemaState seeded from an existing JSON Schema.
+
+        This allows live mode to build on schemas previously registered via
+        infer mode, preserving all known fields.
+
+        Args:
+            topic_name: Topic name
+            schema_json: Existing JSON Schema string from Schema Registry
+            config: Configuration object
+
+        Returns:
+            IncrementalSchemaState with field_analysis populated from the schema
+        """
+        import json
+
+        state = cls(topic_name, config)
+
+        try:
+            schema = json.loads(schema_json)
+            properties = schema.get("properties", {})
+
+            for field_name, field_def in properties.items():
+                field_type = field_def.get("type", "string")
+                # Handle union types like ["string", "null"]
+                if isinstance(field_type, list):
+                    non_null = [t for t in field_type if t != "null"]
+                    field_type = non_null[0] if non_null else "string"
+
+                state.field_analysis[field_name] = {
+                    "types": Counter({field_type: 1}),
+                    "values": [],
+                    "null_count": 1 if "null" in (field_def.get("type", []) if isinstance(field_def.get("type"), list) else []) else 0,
+                    "total_count": 1,
+                    "examples": set(),
+                }
+
+            state.total_records_processed = 1  # Mark as having some data
+            state.dirty = True
+            state.logger.info(
+                f"Seeded state for '{topic_name}' from existing schema "
+                f"({len(properties)} fields)"
+            )
+        except Exception as e:
+            state.logger.warning(f"Failed to seed state from schema: {e}")
+
+        return state
+
     def merge_batch(self, parsed_records: List[Dict[str, Any]]) -> InferredSchema:
         """
         Merge a new batch of parsed records into the running state and
