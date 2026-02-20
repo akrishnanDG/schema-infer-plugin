@@ -48,7 +48,8 @@ schema_registry:
   
   # Schema Compatibility Level
   # Options: NONE, BACKWARD, FORWARD, FULL, BACKWARD_TRANSITIVE, FORWARD_TRANSITIVE, FULL_TRANSITIVE
-  compatibility: "NONE"
+  # BACKWARD is recommended: allows adding optional fields (closed content model)
+  compatibility: "BACKWARD"
   
   # Subject Name Strategy
   # Options: TopicNameStrategy, RecordNameStrategy, TopicRecordNameStrategy

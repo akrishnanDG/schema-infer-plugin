@@ -832,6 +832,14 @@ schema_registry:
   compatibility: "BACKWARD"  # BACKWARD, FORWARD, FULL, NONE
 ```
 
+BACKWARD compatibility is the recommended default. Generated JSON Schemas use a **closed content model** (`additionalProperties: false`), which allows adding optional fields across schema versions under BACKWARD compatibility per Confluent's schema evolution rules.
+
+Key compatibility behavior for JSON Schema on Confluent Cloud:
+- **Closed content model** (`additionalProperties: false`): adding optional fields is BACKWARD compatible
+- **Open content model** (`additionalProperties: true` or omitted): adding properties is NOT allowed under BACKWARD
+
+The tool generates closed content model schemas by default, so schema evolution (adding fields discovered in subsequent inference runs) works correctly with BACKWARD compatibility.
+
 #### Subject Name Strategies
 ```yaml
 schema_registry:

@@ -71,6 +71,14 @@ class SchemaMerger:
         merged["properties"] = merged_props
         # Required is empty (all fields optional for safety)
         merged["required"] = []
+        # Match additionalProperties from existing schema to avoid
+        # ADDITIONAL_PROPERTIES_REMOVED/ADDED compatibility errors.
+        # If existing has it, preserve it. If existing doesn't have it,
+        # remove it from merged to keep the same content model.
+        if "additionalProperties" in existing:
+            merged["additionalProperties"] = existing["additionalProperties"]
+        elif "additionalProperties" in merged:
+            del merged["additionalProperties"]
 
         added = set(new_props.keys()) - set(existing_props.keys())
         preserved = set(existing_props.keys()) - set(new_props.keys())

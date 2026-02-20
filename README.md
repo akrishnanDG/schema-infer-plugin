@@ -501,6 +501,8 @@ schema_registry:
   context: "my-context"  # Optional: prefix subjects with :.my-context:
 ```
 
+Generated JSON Schemas use a closed content model (`additionalProperties: false`), which allows adding optional fields under BACKWARD compatibility per Confluent's schema evolution rules. This means schemas can safely evolve across multiple inference runs without compatibility errors.
+
 ### Live Consumer Configuration
 ```yaml
 live:
@@ -541,6 +543,7 @@ python run_tests.py --coverage
 3. **Performance Issues**: Adjust timeout and worker settings
 4. **Memory Issues**: Increase memory limits or reduce batch sizes
 5. **Empty Topics**: When processing many topics, some may appear empty due to broker connection timeouts. The `infer` command uses a small reader pool (10 consumer connections) separate from the processing worker pool to avoid connection saturation. If you still see empty topics, try increasing `--timeout` to give readers more time per topic.
+6. **Schema Compatibility Errors**: Generated schemas use a closed content model (`additionalProperties: false`) which supports BACKWARD-compatible evolution (adding optional fields). If you see `PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL` errors, ensure your schemas use `additionalProperties: false` — an open content model (where `additionalProperties` is omitted or `true`) does not allow adding properties under BACKWARD compatibility on Confluent Cloud.
 
 ### Debug Mode
 
