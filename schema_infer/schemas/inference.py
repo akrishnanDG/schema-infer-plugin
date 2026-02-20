@@ -256,14 +256,45 @@ class SchemaInferrer:
         if not candidates:
             return None
 
-        # Return highest scoring candidate
+        # Sort by score descending
         candidates.sort(key=lambda x: x[1], reverse=True)
-        best = candidates[0]
-        self.logger.info(
-            f"Auto-detected discriminator field '{best[0]}' "
-            f"with {best[2]} event types: {best[3]}"
-        )
-        return best[0]
+
+        # Validate top candidates: a real discriminator should produce groups
+        # with meaningfully different field sets (not just different values)
+        for candidate in candidates:
+            field_name = candidate[0]
+
+            # Group records by this candidate's values
+            groups: Dict[str, set] = {}
+            for record in parsed_data:
+                val = record.get(field_name)
+                if val is not None and isinstance(val, str):
+                    if val not in groups:
+                        groups[val] = set()
+                    groups[val].update(record.keys())
+
+            if len(groups) < 2:
+                continue
+
+            # Check if groups have different field sets
+            field_sets = list(groups.values())
+            all_same = all(fs == field_sets[0] for fs in field_sets[1:])
+            if all_same:
+                # All groups have identical fields — not a real discriminator
+                self.logger.debug(
+                    f"Candidate '{field_name}' rejected: all groups have identical fields"
+                )
+                continue
+
+            # This candidate produces groups with different schemas — valid discriminator
+            self.logger.info(
+                f"Auto-detected discriminator field '{field_name}' "
+                f"with {candidate[2]} event types: {candidate[3]}"
+            )
+            return field_name
+
+        # No candidate produced groups with different field sets
+        return None
 
     def infer_multi_event_schemas(
         self,

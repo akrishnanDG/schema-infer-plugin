@@ -46,50 +46,95 @@ class SchemaInferrer:
         self.logger.info("Initialized schema inferrer")
     
     def process_topics_parallel(
-        self, 
+        self,
         topic_messages: Dict[str, List[Tuple[Optional[bytes], bytes]]],
         output_format: str,
         output_path: Optional[str] = None,
         output_dir: Optional[str] = None,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[callable] = None,
+        flatten: bool = False,
+        discriminator: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Process multiple topics in parallel for better performance.
-        
+
         Args:
             topic_messages: Dictionary mapping topic names to their messages
-            output_format: Output format (avro, protobuf, json)
+            output_format: Output format (avro, protobuf, json-schema)
             output_path: Single output file path (for single topic)
             output_dir: Output directory (for multiple topics)
             progress_callback: Optional callback function for progress updates
-            
+            flatten: If True, skip multi-event detection
+            discriminator: Override discriminator field name
+
         Returns:
-            Dictionary with processing results
+            Dictionary with processing results. For multi-event topics,
+            results['multi_event'][topic_name] contains the multi-event data.
         """
-        
+
         results = {
             'successful': 0,
             'failed': 0,
             'total': len(topic_messages),
-            'schemas': {}
+            'schemas': {},
+            'multi_event': {},
         }
-        
+
         def process_single_topic(topic_name, messages):
             """Process a single topic and return results."""
             try:
                 start_time = time.time()
+
+                # Try multi-event inference first (unless flatten)
+                multi_event_result = None
+                if not flatten:
+                    multi_event_result = self.infer_multi_event(
+                        messages, topic_name, discriminator_field=discriminator
+                    )
+
+                if multi_event_result:
+                    # Multi-event: generate sub-schemas + main oneOf schema
+                    elapsed_time = time.time() - start_time
+                    event_schemas = multi_event_result["event_schemas"]
+                    disc_field = multi_event_result["discriminator_field"]
+
+                    from ..schemas.generators import JSONSchemaGenerator
+                    json_gen = JSONSchemaGenerator()
+
+                    event_schema_objs = {}
+                    for et, sd in event_schemas.items():
+                        event_schema_objs[et] = self._dict_to_schema(sd)
+
+                    schema_files = json_gen.generate_multi_event(
+                        topic_name, event_schema_objs, disc_field
+                    )
+
+                    # Write files
+                    if output_dir:
+                        for file_key, content in schema_files.items():
+                            out_file = Path(output_dir) / f"{file_key}.json"
+                            out_file.parent.mkdir(parents=True, exist_ok=True)
+                            out_file.write_text(content)
+
+                    return {
+                        'topic': topic_name,
+                        'success': True,
+                        'multi_event': True,
+                        'multi_event_data': multi_event_result,
+                        'schema_files': schema_files,
+                        'processing_time': elapsed_time,
+                        'message_count': len(messages),
+                    }
+
+                # Flat schema path
                 schema = self.infer_schema(messages, topic_name)
                 elapsed_time = time.time() - start_time
-                
+
                 if schema:
-                    # Convert dictionary back to schema object for generator
                     schema_obj = self._dict_to_schema(schema)
-                    
-                    # Generate schema file
                     generator = SchemaGeneratorFactory.create_generator(output_format)
                     schema_content = generator.generate(schema_obj)
-                    
-                    # Determine output file path
+
                     extensions = {"avro": "avsc", "protobuf": "proto", "json-schema": "json"}
                     file_ext = extensions.get(output_format, output_format)
                     if output_dir:
@@ -102,15 +147,15 @@ class SchemaInferrer:
                         import re
                         safe_name = re.sub(r'[^\w\-.]', '_', topic_name)
                         output_file = f"{safe_name}.{file_ext}"
-                    
-                    # Write schema to file
+
                     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
                     with open(output_file, 'w') as f:
                         f.write(schema_content)
-                    
+
                     return {
                         'topic': topic_name,
                         'success': True,
+                        'multi_event': False,
                         'schema': schema,
                         'output_file': output_file,
                         'processing_time': elapsed_time,
@@ -124,7 +169,7 @@ class SchemaInferrer:
                         'processing_time': elapsed_time,
                         'message_count': len(messages)
                     }
-                    
+
             except Exception as e:
                 return {
                     'topic': topic_name,
@@ -133,43 +178,45 @@ class SchemaInferrer:
                     'processing_time': 0,
                     'message_count': len(messages)
                 }
-        
+
         # Process topics in parallel
         max_workers = min(self.config.performance.max_workers, len(topic_messages))
-        
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all topic processing tasks
             future_to_topic = {
                 executor.submit(process_single_topic, topic_name, messages): topic_name
                 for topic_name, messages in topic_messages.items()
             }
-            
-            # Collect results as they complete
+
             for future in as_completed(future_to_topic):
                 try:
                     result = future.result()
-                    
+
                     if result['success']:
                         results['successful'] += 1
-                        results['schemas'][result['topic']] = result['schema']
-                        print(f"✅ {result['topic']}: Generated schema in {result['processing_time']:.2f}s ({result['message_count']} messages)")
+                        if result.get('multi_event'):
+                            results['multi_event'][result['topic']] = result
+                            event_types = list(result['multi_event_data']['event_schemas'].keys())
+                            disc = result['multi_event_data']['discriminator_field']
+                            print(f"OK {result['topic']}: Multi-event ({len(event_types)} types via '{disc}') in {result['processing_time']:.2f}s ({result['message_count']} messages)")
+                        else:
+                            results['schemas'][result['topic']] = result['schema']
+                            print(f"OK {result['topic']}: Generated schema in {result['processing_time']:.2f}s ({result['message_count']} messages)")
                     else:
                         results['failed'] += 1
-                        print(f"❌ {result['topic']}: {result['error']}")
-                    
-                    # Call progress callback if provided
+                        print(f"FAIL {result['topic']}: {result['error']}")
+
                     if progress_callback:
                         progress_callback(results['successful'] + results['failed'], len(topic_messages))
-                        
+
                 except Exception as e:
                     topic_name = future_to_topic[future]
                     results['failed'] += 1
-                    print(f"❌ {topic_name}: Processing failed - {e}")
-                    
-                    # Call progress callback even for exceptions
+                    print(f"FAIL {topic_name}: Processing failed - {e}")
+
                     if progress_callback:
                         progress_callback(results['successful'] + results['failed'], len(topic_messages))
-        
+
         return results
     
     def infer_schema(
