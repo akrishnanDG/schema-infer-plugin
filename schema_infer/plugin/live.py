@@ -337,26 +337,26 @@ class LiveModeOrchestrator:
         if not parsed_records:
             return
 
-        # Detect discriminator on first batch (cache result)
-        if topic_name not in self._topic_discriminators:
-            from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
-            analyzer = SchemaAnalyzer(
-                confidence_threshold=self.config.inference.confidence_threshold,
-                max_depth=self.config.inference.max_depth,
-            )
-            disc = analyzer.detect_discriminator(parsed_records)
-            self._topic_discriminators[topic_name] = disc
-            if disc:
-                self._topic_event_types[topic_name] = set()
-                click.echo(f"[{_ts()}] {topic_name}: Detected discriminator field '{disc}'")
+        # Detect discriminator on first batch (JSON Schema only)
+        discriminator = None
+        if self.schema_format == "json-schema":
+            if topic_name not in self._topic_discriminators:
+                from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
+                analyzer = SchemaAnalyzer(
+                    confidence_threshold=self.config.inference.confidence_threshold,
+                    max_depth=self.config.inference.max_depth,
+                )
+                disc = analyzer.detect_discriminator(parsed_records)
+                self._topic_discriminators[topic_name] = disc
+                if disc:
+                    self._topic_event_types[topic_name] = set()
+                    click.echo(f"[{_ts()}] {topic_name}: Detected discriminator field '{disc}'")
 
-        discriminator = self._topic_discriminators[topic_name]
+            discriminator = self._topic_discriminators[topic_name]
 
         if discriminator:
-            # Multi-event: split records by event type
             self._process_multi_event_batch(topic_name, parsed_records, discriminator)
         else:
-            # Flat: single state per topic (original behavior)
             self._process_flat_batch(topic_name, parsed_records)
 
     def _process_flat_batch(
@@ -817,9 +817,9 @@ class LiveModeOrchestrator:
         if self.state_store:
             loaded = self.state_store.load(topic_name, self.config)
 
-        # If no disk state, try to seed from Schema Registry
+        # If no disk state, try to seed from Schema Registry (JSON Schema only)
         seeded = None
-        if not loaded and self.registry:
+        if not loaded and self.registry and self.schema_format == "json-schema":
             try:
                 subject = self.registry._generate_subject_name(
                     topic_name, self.schema_format

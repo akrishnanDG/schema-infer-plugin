@@ -894,10 +894,10 @@ For a topic `events` with `user_created` and `payment_processed` events:
 
 #### Limitations
 
-- Multi-event detection is supported in `infer` mode only
-- Live mode and watch mode currently produce flat schemas
-- Multi-event support for live mode is planned for a future release
-- Only JSON Schema format supports `oneOf` with `$ref` references; Avro and Protobuf use flat schemas
+- Multi-event detection, schema references, and schema merging are **JSON Schema only** features
+- Avro and Protobuf formats always produce flat schemas regardless of topic content
+- Multi-event is supported in `infer` and `live` modes for JSON Schema; watch mode uses flat schemas
+- Using `--discriminator` with `--format avro` or `--format protobuf` will show a warning and fall back to flat schema
 
 ### Topic Filtering
 

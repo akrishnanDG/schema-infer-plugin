@@ -179,7 +179,7 @@ events-payment_processed  # sub-schema subject
 events-value              # main schema with references to sub-schemas
 ```
 
-> **Note:** Multi-event detection is currently supported in `infer` mode. Live mode and watch mode use flat schemas. Multi-event support for live mode is planned for a future release.
+> **Note:** Multi-event detection, schema references, and schema merging are JSON Schema features only. Avro and Protobuf formats use flat schemas. Multi-event is supported in both `infer` and `live` modes for JSON Schema. Watch mode uses flat schemas.
 
 ### Watch Mode (New Topic Detection)
 ```bash

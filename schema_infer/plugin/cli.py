@@ -300,6 +300,14 @@ def infer(
             click.echo(f"  {key}: {value}")
         click.echo()
 
+    # Warn if multi-event options used with non-JSON Schema format
+    if format != "json-schema" and discriminator:
+        click.echo(
+            f"Warning: --discriminator is only supported with --format json-schema. "
+            f"Using flat schema for {format}."
+        )
+        discriminator = None
+
     # Validate input
     if not any([topic, topics, topic_prefix, topic_pattern]):
         click.echo("Error: Must specify either --topic, --topics, --topic-prefix, or --topic-pattern", err=True)
@@ -457,16 +465,17 @@ def infer(
                         if flat_schemas:
                             def _register_one(topic_name, schema_dict):
                                 schema_content = inferrer.generate_schema(schema_dict, format)
-                                # Merge with existing SR schema
-                                try:
-                                    subject = registry._generate_subject_name(topic_name, format)
-                                    existing = registry.get_latest_schema(subject)
-                                    if existing and "schema" in existing:
-                                        schema_content = merger.merge_flat_schemas(
-                                            existing["schema"], schema_content
-                                        )
-                                except Exception:
-                                    pass
+                                # Merge with existing SR schema (JSON Schema only)
+                                if format == "json-schema":
+                                    try:
+                                        subject = registry._generate_subject_name(topic_name, format)
+                                        existing = registry.get_latest_schema(subject)
+                                        if existing and "schema" in existing:
+                                            schema_content = merger.merge_flat_schemas(
+                                                existing["schema"], schema_content
+                                            )
+                                    except Exception:
+                                        pass
                                 is_valid, validation_error = validate_generated_schema(schema_content, format)
                                 if not is_valid:
                                     return (topic_name, False, f"Generated schema is invalid: {validation_error}")
@@ -611,9 +620,9 @@ def infer(
                         'time': f'{topic_elapsed:.1f}s'
                     })
 
-                    # Try multi-event inference first (unless --flatten)
+                    # Try multi-event inference first (JSON Schema only, unless --flatten)
                     multi_event_result = None
-                    if not flatten:
+                    if not flatten and format == "json-schema":
                         multi_event_result = inferrer.infer_multi_event(
                             messages, topic_name, discriminator_field=discriminator
                         )
@@ -725,20 +734,20 @@ def infer(
                         # Generate schema in requested format
                         schema_content = inferrer.generate_schema(schema_dict, format)
 
-                        # Output schema (merge with existing if present)
+                        # Output schema (merge with existing if present, JSON Schema only)
                         if register and registry:
-                            # Merge with existing schema from SR
-                            try:
-                                from ..core.merger import SchemaMerger
-                                subject = registry._generate_subject_name(topic_name, format)
-                                existing = registry.get_latest_schema(subject)
-                                if existing and "schema" in existing:
-                                    merger = SchemaMerger()
-                                    schema_content = merger.merge_flat_schemas(
-                                        existing["schema"], schema_content
-                                    )
-                            except Exception:
-                                pass  # No existing schema or merge failed, use new as-is
+                            if format == "json-schema":
+                                try:
+                                    from ..core.merger import SchemaMerger
+                                    subject = registry._generate_subject_name(topic_name, format)
+                                    existing = registry.get_latest_schema(subject)
+                                    if existing and "schema" in existing:
+                                        merger = SchemaMerger()
+                                        schema_content = merger.merge_flat_schemas(
+                                            existing["schema"], schema_content
+                                        )
+                                except Exception:
+                                    pass  # No existing schema or merge failed, use new as-is
 
                             from ..utils.validators import validate_generated_schema
                             is_valid, validation_error = validate_generated_schema(schema_content, format)

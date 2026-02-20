@@ -87,7 +87,7 @@ class SchemaInferrer:
 
                 # Try multi-event inference first (unless flatten)
                 multi_event_result = None
-                if not flatten:
+                if not flatten and output_format == "json-schema":
                     multi_event_result = self.infer_multi_event(
                         messages, topic_name, discriminator_field=discriminator
                     )
