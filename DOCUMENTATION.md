@@ -838,6 +838,59 @@ schema_registry:
   subject_name_strategy: "TopicNameStrategy"  # TopicName, RecordName, TopicRecordName
 ```
 
+### Multi-Event Schema Detection
+
+Topics that contain multiple event types (e.g., user events and payment events in the same topic) are automatically detected and handled. Instead of producing a single flat schema where every field is nullable, the tool generates separate schemas per event type with a main `oneOf` composition schema.
+
+#### How Detection Works
+
+1. The tool scans for candidate discriminator fields (top-level string fields with low cardinality)
+2. Fields with well-known names (`event_type`, `type`, `action`, `kind`, etc.) are prioritized
+3. A candidate is only accepted if grouping records by its values produces groups with **different field sets** — if all groups have identical fields, the candidate is rejected (it's just a value variation, not different event types)
+4. If a valid discriminator is found, per-type schemas are generated; otherwise, a flat schema is produced
+
+#### Auto-Detection (Default)
+
+```bash
+# Automatically detects event types and generates per-type schemas
+schema-infer infer --topic events --output-dir ./schemas --register
+```
+
+#### Override Discriminator
+
+```bash
+# Specify which field identifies event types
+schema-infer infer --topic events --discriminator event_type --output-dir ./schemas
+```
+
+#### Disable Multi-Event (Flat Schema)
+
+```bash
+# Force a single merged schema
+schema-infer infer --topic events --flatten --output-dir ./schemas
+```
+
+#### Output Structure
+
+For a topic `events` with `user_created` and `payment_processed` events:
+
+**Files:**
+- `events.json` - Main schema with `oneOf` referencing sub-schemas
+- `events.user_created.json` - Standalone user event schema
+- `events.payment_processed.json` - Standalone payment event schema
+
+**Schema Registry subjects (with --register):**
+- `events-user_created` - Sub-schema subject
+- `events-payment_processed` - Sub-schema subject
+- `events-value` - Main topic schema with `references` pointing to sub-schemas
+
+#### Limitations
+
+- Multi-event detection is supported in `infer` mode only
+- Live mode and watch mode currently produce flat schemas
+- Multi-event support for live mode is planned for a future release
+- Only JSON Schema format supports `oneOf` with `$ref` references; Avro and Protobuf use flat schemas
+
 ### Topic Filtering
 
 #### Internal Topic Exclusion

@@ -219,12 +219,17 @@ def infer(
     Reads messages from Kafka topics and automatically generates schemas in your chosen format.
     Uses an optimistic approach to sample the latest messages for accurate schema inference.
 
+    Topics with multiple event types are automatically detected and split into
+    per-type schemas with a main oneOf schema using Schema Registry references.
+    Use --flatten to disable this and produce a single merged schema.
+
     \b
     COMMON USE CASES:
       - Generate Avro schemas for Schema Inference Platform/Cloud integration
       - Create Protobuf schemas for high-performance applications
       - Build JSON schemas for API validation and documentation
       - Migrate from schemaless to schema-based data architecture
+      - Split multi-event topics into per-type schemas with references
 
     \b
     HOW IT WORKS:

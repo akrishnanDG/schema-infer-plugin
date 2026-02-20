@@ -659,6 +659,68 @@ schema-infer --config prod-config.yaml infer --topic-prefix "prod-" --format avr
 
 ## Advanced Examples
 
+### Example: Multi-Event Topic Schema Inference
+
+**Scenario**: A topic `user-activity` contains multiple event types mixed together.
+
+**Sample messages in the topic:**
+```json
+{"event_type": "page_view", "user_id": "u1", "url": "/products", "duration_ms": 3200}
+{"event_type": "purchase", "user_id": "u2", "order_id": "ord-123", "amount": 49.99, "currency": "USD"}
+{"event_type": "signup", "user_id": "u3", "email": "new@example.com", "referral_code": "ABC"}
+```
+
+**Run inference (auto-detects `event_type` as discriminator):**
+```bash
+schema-infer --config config.yaml infer --topic user-activity --output-dir ./schemas --register
+```
+
+**Output:**
+```
+Found 1 topics to process
+  Detected 3 event types via 'event_type': page_view (120), purchase (80), signup (50)
+Processing completed in 4.2s
+
+Results:
+  Successful: 2
+  Failed: 0
+  Total: 2
+```
+
+**Generated files:**
+```
+schemas/user-activity.json              # oneOf schema referencing sub-schemas
+schemas/user-activity.page_view.json    # page_view event schema (user_id, url, duration_ms)
+schemas/user-activity.purchase.json     # purchase event schema (user_id, order_id, amount, currency)
+schemas/user-activity.signup.json       # signup event schema (user_id, email, referral_code)
+```
+
+**Main schema (`user-activity.json`):**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "user-activity",
+  "description": "Multi-event schema for user-activity (discriminator: event_type)",
+  "oneOf": [
+    {"$ref": "user-activity-page_view"},
+    {"$ref": "user-activity-purchase"},
+    {"$ref": "user-activity-signup"}
+  ]
+}
+```
+
+**Schema Registry subjects created (with --register):**
+- `user-activity-page_view` - page_view sub-schema
+- `user-activity-purchase` - purchase sub-schema
+- `user-activity-signup` - signup sub-schema
+- `user-activity-value` - main schema with references
+
+**Force flat schema instead:**
+```bash
+schema-infer --config config.yaml infer --topic user-activity --flatten --output-dir ./schemas
+```
+This produces a single `user-activity.json` with all fields merged and marked nullable.
+
 ### Example 9: Custom Format Detection
 
 **Scenario**: Handle custom data formats with forced format detection.

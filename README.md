@@ -15,6 +15,7 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 - **Flexible Topic Discovery**: Single topics, multiple topics, prefix/pattern matching
 - **Enterprise Security**: Full Confluent Cloud and Platform authentication support
 - **Schema Registry Integration**: Automatic registration with compatibility management
+- **Multi-Event Detection**: Auto-detect topics with multiple event types and generate per-type schemas with `oneOf` references
 - **Production Ready**: Schema validation, retry logic, and comprehensive error handling
 - **Continuous Monitoring**: Watch mode for automatic schema inference on new topics
 - **Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas
@@ -141,6 +142,44 @@ schema_registry:
   compatibility: "BACKWARD"
   subject_name_strategy: "TopicNameStrategy"
 ```
+
+### Multi-Event Schema Detection
+
+When a topic contains multiple event types (e.g., `user_created`, `payment_processed`, `order_placed`), the tool automatically detects this and generates separate schemas per event type with a main `oneOf` schema using Schema Registry references.
+
+**How it works:**
+1. Auto-detects a discriminator field (`event_type`, `type`, `action`, etc.)
+2. Validates that different discriminator values produce different field sets (same schema with different values is not split)
+3. Generates individual sub-schemas for each event type
+4. Creates a main topic schema using `oneOf` with `$ref` to sub-schemas
+5. Registers sub-schemas as separate subjects, then the main schema with references
+
+```bash
+# Auto-detect and split (default behavior)
+schema-infer infer --topic events --output-dir ./schemas --register
+
+# Override the discriminator field
+schema-infer infer --topic events --discriminator event_type --output-dir ./schemas
+
+# Force single flat schema (disable multi-event detection)
+schema-infer infer --topic events --flatten --output-dir ./schemas
+```
+
+**Output for a topic with `user_created` and `payment_processed` events:**
+```
+schemas/events.json                     # main oneOf schema with $ref
+schemas/events.user_created.json        # user event sub-schema
+schemas/events.payment_processed.json   # payment event sub-schema
+```
+
+**Schema Registry subjects (with --register):**
+```
+events-user_created       # sub-schema subject
+events-payment_processed  # sub-schema subject
+events-value              # main schema with references to sub-schemas
+```
+
+> **Note:** Multi-event detection is currently supported in `infer` mode. Live mode and watch mode use flat schemas. Multi-event support for live mode is planned for a future release.
 
 ### Watch Mode (New Topic Detection)
 ```bash
