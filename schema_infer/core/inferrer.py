@@ -287,6 +287,111 @@ class SchemaInferrer:
             self.logger.error(f"Schema inference failed: {e}")
             raise InferenceError(f"Schema inference failed: {e}")
     
+    def infer_multi_event(
+        self,
+        messages: List[Tuple[Optional[bytes], bytes]],
+        topic_name: str,
+        discriminator_field: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Attempt multi-event schema inference.
+
+        Parses messages, auto-detects (or uses provided) discriminator field,
+        groups records by event type, and infers per-type schemas.
+
+        Args:
+            messages: List of (key, value) tuples from Kafka
+            topic_name: Name of the topic
+            discriminator_field: Explicit discriminator field (None = auto-detect)
+
+        Returns:
+            Dict with keys:
+              - "discriminator_field": str
+              - "event_schemas": {event_type: schema_dict}
+              - "event_counts": {event_type: record_count}
+              - "_metadata": inference metadata
+            Or None if no discriminator found or multi-event not applicable
+        """
+        if not messages:
+            return None
+
+        try:
+            # Parse messages (reuse existing parsing logic)
+            message_values = [value for _, value in messages if value is not None]
+            if not message_values:
+                return None
+
+            if self.config.inference.auto_detect_format:
+                detected_format, confidence = self.format_detector.detect_format(message_values)
+            else:
+                detected_format = self.config.inference.forced_data_format or "json"
+                confidence = 1.0
+
+            parser = self._create_parser(detected_format, message_values)
+            parsed_data = parser.parse_batch(message_values)
+            if not parsed_data or len(parsed_data) < 5:
+                return None
+
+            # Detect or validate discriminator
+            if discriminator_field:
+                # Verify provided field exists
+                present = sum(1 for r in parsed_data if discriminator_field in r)
+                if present < len(parsed_data) * 0.5:
+                    self.logger.warning(
+                        f"Provided discriminator '{discriminator_field}' found in only "
+                        f"{present}/{len(parsed_data)} records"
+                    )
+                    return None
+            else:
+                discriminator_field = self.schema_analyzer.detect_discriminator(parsed_data)
+
+            if not discriminator_field:
+                return None
+
+            # Infer per-event-type schemas
+            event_schemas_obj = self.schema_analyzer.infer_multi_event_schemas(
+                parsed_data, discriminator_field, topic_name
+            )
+
+            if len(event_schemas_obj) < 2:
+                # Only one event type found — not really multi-event
+                return None
+
+            # Convert to dicts
+            event_schemas = {}
+            event_counts = {}
+            for event_type, schema in event_schemas_obj.items():
+                schema_dict = schema.to_dict()
+                schema_dict["_metadata"] = {
+                    "format": detected_format,
+                    "message_count": len(message_values),
+                    "parsed_count": len(parsed_data),
+                    "confidence": confidence,
+                }
+                event_schemas[event_type] = schema_dict
+                event_counts[event_type] = sum(
+                    1 for r in parsed_data
+                    if str(r.get(discriminator_field)) == event_type
+                )
+
+            return {
+                "discriminator_field": discriminator_field,
+                "event_schemas": event_schemas,
+                "event_counts": event_counts,
+                "_metadata": {
+                    "format": detected_format,
+                    "message_count": len(message_values),
+                    "parsed_count": len(parsed_data),
+                    "confidence": confidence,
+                    "multi_event": True,
+                    "event_types": list(event_schemas.keys()),
+                },
+            }
+
+        except Exception as e:
+            self.logger.debug(f"Multi-event inference failed: {e}")
+            return None
+
     def generate_schema(self, schema_dict: Dict[str, Any], schema_format: str) -> str:
         """
         Generate schema in the specified format.

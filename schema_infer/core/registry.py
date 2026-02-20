@@ -57,32 +57,38 @@ class SchemaRegistry:
         self._test_connection()
     
     def register_schema(
-        self, 
-        topic_name: str, 
-        schema_content: str, 
+        self,
+        topic_name: str,
+        schema_content: str,
         schema_format: str,
-        schema_type: str = "AVRO"
+        schema_type: str = "AVRO",
+        references: Optional[List[Dict[str, Any]]] = None,
+        subject_override: Optional[str] = None,
     ) -> int:
         """
         Register a schema in the Schema Registry using topic name strategy.
-        
+
         Args:
             topic_name: Kafka topic name
             schema_content: Schema content as string
             schema_format: Schema format (avro, protobuf, json-schema)
             schema_type: Schema type for registry (AVRO, PROTOBUF, JSON)
-            
+            references: Optional list of schema references for composition
+            subject_override: Optional subject name override (bypasses strategy)
+
         Returns:
             Schema ID
         """
-        
+
         try:
-            subject_name = self._generate_subject_name(topic_name, schema_format)
+            subject_name = subject_override or self._generate_subject_name(topic_name, schema_format)
             registry_type = self._map_format_to_registry_type(schema_format)
             schema_data = {
                 "schema": schema_content,
                 "schemaType": registry_type
             }
+            if references:
+                schema_data["references"] = references
 
             if self.config.schema_registry.compatibility != "NONE":
                 self._set_subject_compatibility(subject_name, self.config.schema_registry.compatibility)
@@ -142,6 +148,64 @@ class SchemaRegistry:
             self.logger.error(f"Unexpected error registering schema: {e}")
             raise SchemaRegistryError(f"Unexpected error: {e}")
     
+    def register_multi_event_schemas(
+        self,
+        topic_name: str,
+        schema_contents: Dict[str, str],
+        main_schema_content: str,
+        schema_format: str,
+    ) -> Dict[str, int]:
+        """
+        Register multi-event schemas with references.
+
+        Registers each event type sub-schema as its own subject, then
+        registers the main topic schema with references to all sub-schemas.
+
+        Args:
+            topic_name: Kafka topic name
+            schema_contents: Dict mapping event type to schema JSON string
+            main_schema_content: Main oneOf schema JSON string
+            schema_format: Schema format (json-schema, avro, protobuf)
+
+        Returns:
+            Dict mapping subject name to schema ID
+        """
+        result = {}
+        references = []
+
+        # Register sub-schemas first
+        for event_type, schema_content in sorted(schema_contents.items()):
+            subject = f"{topic_name}-{event_type}"
+            schema_id = self.register_schema(
+                topic_name,
+                schema_content,
+                schema_format,
+                subject_override=subject,
+            )
+            result[subject] = schema_id
+            references.append({
+                "name": subject,
+                "subject": subject,
+                "version": 1,
+            })
+            self.logger.info(f"Registered sub-schema '{subject}' with ID {schema_id}")
+
+        # Register main schema with references
+        main_schema_id = self.register_schema(
+            topic_name,
+            main_schema_content,
+            schema_format,
+            references=references,
+        )
+        main_subject = self._generate_subject_name(topic_name, schema_format)
+        result[main_subject] = main_schema_id
+        self.logger.info(
+            f"Registered main schema '{main_subject}' with ID {main_schema_id} "
+            f"referencing {len(references)} sub-schemas"
+        )
+
+        return result
+
     def get_schema(self, schema_id: int) -> Dict[str, Any]:
         """
         Get a schema by ID.

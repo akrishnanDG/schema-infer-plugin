@@ -506,6 +506,49 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
         
         return json.dumps(json_schema, indent=2)
     
+    def generate_multi_event(
+        self,
+        topic_name: str,
+        event_schemas: Dict[str, 'InferredSchema'],
+        discriminator_field: str,
+    ) -> Dict[str, str]:
+        """
+        Generate JSON Schemas for multi-event topics.
+
+        Produces individual sub-schemas for each event type and a main
+        envelope schema using oneOf with $ref.
+
+        Args:
+            topic_name: Base topic name
+            event_schemas: Dict mapping event type to InferredSchema
+            discriminator_field: Field name used as discriminator
+
+        Returns:
+            Dict with keys:
+              - "{topic_name}" -> main oneOf schema JSON string
+              - "{topic_name}.{event_type}" -> sub-schema JSON string per type
+        """
+        result = {}
+
+        # Generate individual sub-schemas
+        refs = []
+        for event_type, schema in sorted(event_schemas.items()):
+            sub_schema_json = self.generate(schema)
+            subject = f"{topic_name}-{event_type}"
+            result[f"{topic_name}.{event_type}"] = sub_schema_json
+            refs.append({"$ref": subject})
+
+        # Generate main envelope schema with oneOf
+        main_schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": topic_name,
+            "description": f"Multi-event schema for {topic_name} (discriminator: {discriminator_field})",
+            "oneOf": refs,
+        }
+        result[topic_name] = json.dumps(main_schema, indent=2)
+
+        return result
+
     def get_file_extension(self) -> str:
         """Get the file extension for JSON Schema."""
         return "json"

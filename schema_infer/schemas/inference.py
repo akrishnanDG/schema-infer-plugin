@@ -199,6 +199,117 @@ class SchemaInferrer:
             namespace="com.schema-infer.schema.infer"
         )
     
+    def detect_discriminator(self, parsed_data: List[Dict[str, Any]]) -> Optional[str]:
+        """
+        Auto-detect a discriminator field that separates event types.
+
+        Looks for top-level string fields with low cardinality that appear
+        in most records. Prioritizes well-known field names.
+
+        Args:
+            parsed_data: List of parsed data dictionaries
+
+        Returns:
+            Field name of the best discriminator, or None if not found
+        """
+        if len(parsed_data) < 5:
+            return None
+
+        # Well-known discriminator field names (higher priority)
+        priority_names = {"event_type", "type", "eventType", "__type", "action", "kind", "event", "record_type", "message_type", "category"}
+
+        candidates = []
+        total_records = len(parsed_data)
+
+        # Collect all field names across all records
+        all_field_names = set()
+        for record in parsed_data:
+            all_field_names.update(record.keys())
+
+        for field_name in all_field_names:
+            values = []
+            present_count = 0
+            for record in parsed_data:
+                if field_name in record and record[field_name] is not None:
+                    val = record[field_name]
+                    if isinstance(val, str):
+                        values.append(val)
+                        present_count += 1
+
+            if not values:
+                continue
+
+            presence_ratio = present_count / total_records
+            unique_values = set(values)
+            cardinality = len(unique_values)
+
+            # Criteria: present in >90% of records, string type, 2-20 unique values,
+            # and cardinality is much less than record count (not a high-cardinality ID field)
+            if (presence_ratio >= 0.9
+                    and 2 <= cardinality <= 20
+                    and cardinality < total_records * 0.3):
+                # Score: heavily prioritize known names, then presence ratio, then lower cardinality
+                is_priority = field_name in priority_names or field_name.lower() in priority_names
+                score = (100 if is_priority else 0) + (presence_ratio * 10) + (1.0 / cardinality)
+                candidates.append((field_name, score, cardinality, unique_values))
+
+        if not candidates:
+            return None
+
+        # Return highest scoring candidate
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        best = candidates[0]
+        self.logger.info(
+            f"Auto-detected discriminator field '{best[0]}' "
+            f"with {best[2]} event types: {best[3]}"
+        )
+        return best[0]
+
+    def infer_multi_event_schemas(
+        self,
+        parsed_data: List[Dict[str, Any]],
+        discriminator_field: str,
+        schema_name: str,
+    ) -> Dict[str, 'InferredSchema']:
+        """
+        Infer separate schemas per event type based on a discriminator field.
+
+        Groups records by the discriminator field value, then infers a schema
+        for each group independently.
+
+        Args:
+            parsed_data: List of parsed data dictionaries
+            discriminator_field: Field name used to separate event types
+            schema_name: Base name for the schemas
+
+        Returns:
+            Dict mapping event type value to its InferredSchema
+        """
+        # Group records by discriminator value
+        groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for record in parsed_data:
+            event_type = record.get(discriminator_field)
+            if event_type is not None:
+                groups[str(event_type)] = groups.get(str(event_type), [])
+                groups[str(event_type)].append(record)
+            else:
+                groups["_unknown"] = groups.get("_unknown", [])
+                groups["_unknown"].append(record)
+
+        # Infer schema per group
+        event_schemas = {}
+        for event_type, records in groups.items():
+            if len(records) < 2:
+                continue
+            sub_name = f"{schema_name}-{event_type}"
+            event_schemas[event_type] = self.infer_schema(records, sub_name)
+            self.logger.info(
+                f"Inferred schema for event type '{event_type}': "
+                f"{len(event_schemas[event_type].fields)} fields from {len(records)} records"
+            )
+
+        return event_schemas
+
     def analyze_fields(self, parsed_data: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """
         Analyze fields across all records.

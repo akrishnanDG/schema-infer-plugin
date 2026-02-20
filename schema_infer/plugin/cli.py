@@ -159,6 +159,16 @@ def main(
     help="Force specific data format detection (default: auto-detect)",
 )
 @click.option(
+    "--flatten",
+    is_flag=True,
+    default=False,
+    help="Disable multi-event detection, merge all records into one flat schema",
+)
+@click.option(
+    "--discriminator",
+    help="Override auto-detected discriminator field for multi-event schemas (e.g., 'event_type')",
+)
+@click.option(
     "--exclude-internal",
     is_flag=True,
     default=None,
@@ -195,6 +205,8 @@ def infer(
     max_messages: int,
     timeout: int,
     data_format: str,
+    flatten: bool,
+    discriminator: Optional[str],
     exclude_internal: Optional[bool],
     internal_prefix: Optional[str],
     additional_exclude_prefixes: Optional[str],
@@ -506,81 +518,138 @@ def infer(
                         'time': f'{topic_elapsed:.1f}s'
                     })
 
-                    # Infer schema
-                    schema_dict = inferrer.infer_schema(messages, topic_name)
+                    # Try multi-event inference first (unless --flatten)
+                    multi_event_result = None
+                    if not flatten:
+                        multi_event_result = inferrer.infer_multi_event(
+                            messages, topic_name, discriminator_field=discriminator
+                        )
 
-                    if not schema_dict:
-                        error_reason = "Could not infer schema - messages may be in unsupported format or corrupted"
-                        error_details.append({
-                            'topic': topic_name,
-                            'reason': error_reason,
-                            'type': 'schema_inference_failed'
-                        })
-                        if not config.performance.show_progress:
-                            click.echo(f"  FAIL {topic_name}: {error_reason}")
-                        progress_bar.set_postfix({
-                            'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                            'time': f'{topic_elapsed:.1f}s',
-                            'status': 'failed'
-                        })
-                        error_count += 1
-                        progress_bar.update(1)
-                        continue
+                    if multi_event_result:
+                        # Multi-event path
+                        disc_field = multi_event_result["discriminator_field"]
+                        event_schemas = multi_event_result["event_schemas"]
+                        event_counts = multi_event_result["event_counts"]
+                        event_types = list(event_schemas.keys())
 
-                    # Show inference metadata
-                    metadata = schema_dict.get("_metadata", {})
-                    detected_format = metadata.get("format", "unknown")
-                    confidence = metadata.get("confidence", 0)
-                    if not config.performance.show_progress:
-                        click.echo(f"  Format: {detected_format}")
+                        click.echo(
+                            f"  Detected {len(event_types)} event types via '{disc_field}': "
+                            f"{', '.join(f'{t} ({event_counts.get(t, 0)})' for t in event_types)}"
+                        )
 
-                    # Generate schema in requested format
-                    schema_content = inferrer.generate_schema(schema_dict, format)
+                        # Generate sub-schemas + main oneOf schema
+                        from ..schemas.generators import JSONSchemaGenerator
+                        json_gen = JSONSchemaGenerator()
 
-                    # Output schema
-                    if register and registry:
-                        # Validate schema before registration
-                        from ..utils.validators import validate_generated_schema
-                        is_valid, validation_error = validate_generated_schema(schema_content, format)
-                        if not is_valid:
-                            error_reason = f"Generated schema is invalid: {validation_error}"
+                        # Convert event schema dicts back to InferredSchema objects
+                        event_schema_objs = {}
+                        for et, sd in event_schemas.items():
+                            event_schema_objs[et] = inferrer._dict_to_schema(sd)
+
+                        schema_files = json_gen.generate_multi_event(
+                            topic_name, event_schema_objs, disc_field
+                        )
+
+                        # Write schema files
+                        if output_dir:
+                            output_dir.mkdir(parents=True, exist_ok=True)
+                            for file_key, content in schema_files.items():
+                                schema_file = output_dir / f"{file_key}.json"
+                                schema_file.write_text(content)
+
+                        # Register with references
+                        if register and registry:
+                            try:
+                                sub_contents = {
+                                    et: schema_files[f"{topic_name}.{et}"]
+                                    for et in event_types
+                                }
+                                main_content = schema_files[topic_name]
+                                reg_result = registry.register_multi_event_schemas(
+                                    topic_name, sub_contents, main_content, format
+                                )
+                                click.echo(
+                                    f"  Registered {len(reg_result)} schemas "
+                                    f"({len(event_types)} sub-schemas + 1 main with references)"
+                                )
+                            except Exception as e:
+                                click.echo(f"  FAIL {topic_name}: Multi-event registration failed - {e}", err=True)
+                                error_count += 1
+                                progress_bar.update(1)
+                                continue
+
+                        success_count += 1
+
+                    else:
+                        # Single flat schema path (original behavior)
+                        schema_dict = inferrer.infer_schema(messages, topic_name)
+
+                        if not schema_dict:
+                            error_reason = "Could not infer schema - messages may be in unsupported format or corrupted"
                             error_details.append({
                                 'topic': topic_name,
                                 'reason': error_reason,
-                                'type': 'schema_validation_error'
-                            })
-                            click.echo(f"  FAIL {topic_name}: {error_reason}", err=True)
-                            error_count += 1
-                            continue
-                        try:
-                            schema_id = registry.register_schema(topic_name, schema_content, format)
-                            if not config.performance.show_progress:
-                                click.echo(f"  OK Registered schema with ID: {schema_id}")
-                        except Exception as e:
-                            error_reason = f"Failed to register schema to Schema Registry: {str(e)}"
-                            error_details.append({
-                                'topic': topic_name,
-                                'reason': error_reason,
-                                'type': 'schema_registry_error'
+                                'type': 'schema_inference_failed'
                             })
                             if not config.performance.show_progress:
-                                click.echo(f"  FAIL {topic_name}: {error_reason}", err=True)
+                                click.echo(f"  FAIL {topic_name}: {error_reason}")
+                            progress_bar.set_postfix({
+                                'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
+                                'time': f'{topic_elapsed:.1f}s',
+                                'status': 'failed'
+                            })
                             error_count += 1
                             progress_bar.update(1)
                             continue
 
-                    if output:
-                        output.write_text(schema_content)
-                        if not config.performance.show_progress:
-                            click.echo(f"  Schema written to: {output}")
+                        # Generate schema in requested format
+                        schema_content = inferrer.generate_schema(schema_dict, format)
 
-                    if output_dir:
-                        output_dir.mkdir(parents=True, exist_ok=True)
-                        extensions = {"avro": "avsc", "protobuf": "proto", "json-schema": "json"}
-                        schema_file = output_dir / f"{topic_name}.{extensions[format]}"
-                        schema_file.write_text(schema_content)
-                        if not config.performance.show_progress:
-                            click.echo(f"  Schema written to: {schema_file}")
+                        # Output schema
+                        if register and registry:
+                            from ..utils.validators import validate_generated_schema
+                            is_valid, validation_error = validate_generated_schema(schema_content, format)
+                            if not is_valid:
+                                error_reason = f"Generated schema is invalid: {validation_error}"
+                                error_details.append({
+                                    'topic': topic_name,
+                                    'reason': error_reason,
+                                    'type': 'schema_validation_error'
+                                })
+                                click.echo(f"  FAIL {topic_name}: {error_reason}", err=True)
+                                error_count += 1
+                                continue
+                            try:
+                                schema_id = registry.register_schema(topic_name, schema_content, format)
+                                if not config.performance.show_progress:
+                                    click.echo(f"  OK Registered schema with ID: {schema_id}")
+                            except Exception as e:
+                                error_reason = f"Failed to register schema to Schema Registry: {str(e)}"
+                                error_details.append({
+                                    'topic': topic_name,
+                                    'reason': error_reason,
+                                    'type': 'schema_registry_error'
+                                })
+                                if not config.performance.show_progress:
+                                    click.echo(f"  FAIL {topic_name}: {error_reason}", err=True)
+                                error_count += 1
+                                progress_bar.update(1)
+                                continue
+
+                        if output:
+                            output.write_text(schema_content)
+                            if not config.performance.show_progress:
+                                click.echo(f"  Schema written to: {output}")
+
+                        if output_dir:
+                            output_dir.mkdir(parents=True, exist_ok=True)
+                            extensions = {"avro": "avsc", "protobuf": "proto", "json-schema": "json"}
+                            schema_file = output_dir / f"{topic_name}.{extensions[format]}"
+                            schema_file.write_text(schema_content)
+                            if not config.performance.show_progress:
+                                click.echo(f"  Schema written to: {schema_file}")
+
+                        success_count += 1
 
                     success_count += 1
                     progress_bar.set_postfix({
