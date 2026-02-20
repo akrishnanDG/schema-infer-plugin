@@ -438,7 +438,7 @@ class LiveModeOrchestrator:
 
         for event_type, records in groups.items():
             # State key: topic:event_type
-            state_key = f"{topic_name}:{event_type}"
+            state_key = f"{topic_name}__evt__{event_type}"
             state = self._get_or_create_state(state_key)
 
             new_schema = state.merge_batch(records)
@@ -490,7 +490,7 @@ class LiveModeOrchestrator:
         # Build sub-schemas from per-type states
         event_schema_objs = {}
         for event_type in event_types:
-            state_key = f"{topic_name}:{event_type}"
+            state_key = f"{topic_name}__evt__{event_type}"
             with self._states_lock:
                 state = self._states.get(state_key)
             if state and state.last_schema:
@@ -669,6 +669,20 @@ class LiveModeOrchestrator:
                 f"[{_ts()}] {topic_name}: Failed to generate schema: {e}", err=True
             )
             return
+
+        # Merge with existing SR schema to preserve additionalProperties setting
+        if self.schema_format == "json-schema":
+            try:
+                from ..core.merger import SchemaMerger
+                subject = self.registry._generate_subject_name(topic_name, self.schema_format)
+                existing = self.registry.get_latest_schema(subject)
+                if existing and "schema" in existing:
+                    merger = SchemaMerger()
+                    schema_content = merger.merge_flat_schemas(
+                        existing["schema"], schema_content
+                    )
+            except Exception:
+                pass
 
         # Validate schema
         from ..utils.validators import validate_generated_schema

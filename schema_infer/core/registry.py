@@ -290,7 +290,11 @@ class SchemaRegistry:
             return response.json()
 
         except requests.exceptions.RequestException as e:
-            self.logger.error(f"Failed to get latest schema for {subject}: {e}")
+            # 404 is expected when no schema exists yet — log at debug, not error
+            if hasattr(e, 'response') and e.response is not None and e.response.status_code == 404:
+                self.logger.debug(f"No existing schema for {subject}")
+            else:
+                self.logger.error(f"Failed to get latest schema for {subject}: {e}")
             raise SchemaRegistryError(f"Failed to get latest schema: {e}")
     
     def list_subjects(self) -> List[str]:
