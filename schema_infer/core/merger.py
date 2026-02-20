@@ -55,16 +55,8 @@ class SchemaMerger:
         existing_props = existing.get("properties", {})
         new_props = new.get("properties", {})
 
-        # Merge properties: union of all fields
-        merged_props = {}
-
-        # Start with existing fields (preserves fields not in new sample)
-        for field_name, field_def in existing_props.items():
-            merged_props[field_name] = field_def
-
-        # Override/add with new fields (newer inference is more accurate)
-        for field_name, field_def in new_props.items():
-            merged_props[field_name] = field_def
+        # Merge properties: union of all fields with deep merge
+        merged_props = self._merge_properties(existing_props, new_props)
 
         # Build merged schema
         merged = dict(new)  # Use new schema as base (title, $schema, etc.)
@@ -89,6 +81,68 @@ class SchemaMerger:
             )
 
         return json.dumps(merged, indent=2)
+
+    def _merge_properties(
+        self,
+        existing_props: Dict[str, Any],
+        new_props: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Recursively merge two property sets.
+
+        - Fields only in existing: preserved
+        - Fields only in new: added
+        - Fields in both with same type: use new definition
+        - Fields in both with different types: keep existing (avoid compat errors)
+        - Fields in both that are objects: recursively merge nested properties
+        """
+        merged = dict(existing_props)
+
+        for field_name, new_def in new_props.items():
+            if field_name not in merged:
+                merged[field_name] = new_def
+                continue
+
+            existing_def = merged[field_name]
+
+            # Check types
+            existing_type = self._extract_primary_type(existing_def)
+            new_type = self._extract_primary_type(new_def)
+
+            # Different types: keep existing to avoid compatibility errors
+            if existing_type and new_type and existing_type != new_type:
+                continue
+
+            # Both are objects with properties: deep merge
+            if (existing_type == "object"
+                    and isinstance(existing_def, dict) and "properties" in existing_def
+                    and isinstance(new_def, dict) and "properties" in new_def):
+                merged_nested = self._merge_properties(
+                    existing_def.get("properties", {}),
+                    new_def.get("properties", {}),
+                )
+                merged_def = dict(new_def)
+                merged_def["properties"] = merged_nested
+                merged[field_name] = merged_def
+                continue
+
+            # Same type: use new definition
+            merged[field_name] = new_def
+
+        return merged
+
+    @staticmethod
+    def _extract_primary_type(field_def: Any) -> str:
+        """Extract the primary (non-null) type from a field definition."""
+        if not isinstance(field_def, dict):
+            return ""
+        field_type = field_def.get("type", "")
+        if isinstance(field_type, str):
+            return field_type
+        if isinstance(field_type, list):
+            for t in field_type:
+                if t != "null":
+                    return t
+        return ""
 
     def merge_multi_event_schemas(
         self,
