@@ -462,9 +462,7 @@ class SchemaInferrer:
         
         if isinstance(value, bool):
             return FieldType("boolean")
-        elif isinstance(value, int):
-            return FieldType("int")
-        elif isinstance(value, float):
+        elif isinstance(value, (int, float)):
             return FieldType("float")
         elif isinstance(value, str):
             # Check for datetime patterns

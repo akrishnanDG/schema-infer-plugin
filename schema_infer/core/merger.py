@@ -58,19 +58,17 @@ class SchemaMerger:
         # Merge properties: union of all fields with deep merge
         merged_props = self._merge_properties(existing_props, new_props)
 
-        # Build merged schema
-        merged = dict(new)  # Use new schema as base (title, $schema, etc.)
+        # Build merged schema — use existing as base to preserve types
+        merged = dict(existing)
         merged["properties"] = merged_props
         # Required is empty (all fields optional for safety)
         merged["required"] = []
-        # Match additionalProperties from existing schema to avoid
-        # ADDITIONAL_PROPERTIES_REMOVED/ADDED compatibility errors.
-        # If existing has it, preserve it. If existing doesn't have it,
-        # remove it from merged to keep the same content model.
+        # Preserve title from new schema
+        if "title" in new:
+            merged["title"] = new["title"]
+        # Preserve additionalProperties from existing
         if "additionalProperties" in existing:
             merged["additionalProperties"] = existing["additionalProperties"]
-        elif "additionalProperties" in merged:
-            del merged["additionalProperties"]
 
         added = set(new_props.keys()) - set(existing_props.keys())
         preserved = set(existing_props.keys()) - set(new_props.keys())
@@ -91,14 +89,16 @@ class SchemaMerger:
 
         - Fields only in existing: preserved
         - Fields only in new: added
-        - Fields in both with same type: use new definition
         - Fields in both with different types: keep existing (avoid compat errors)
         - Fields in both that are objects: recursively merge nested properties
+        - Fields in both that are arrays: recursively merge items.properties
+        - Fields in both with same type, no nesting: keep existing definition
         """
         merged = dict(existing_props)
 
         for field_name, new_def in new_props.items():
             if field_name not in merged:
+                # New field: add it
                 merged[field_name] = new_def
                 continue
 
@@ -120,13 +120,35 @@ class SchemaMerger:
                     existing_def.get("properties", {}),
                     new_def.get("properties", {}),
                 )
-                merged_def = dict(new_def)
+                merged_def = dict(existing_def)
                 merged_def["properties"] = merged_nested
                 merged[field_name] = merged_def
                 continue
 
-            # Same type: use new definition
-            merged[field_name] = new_def
+            # Both are arrays: merge items if present
+            if (existing_type == "array"
+                    and isinstance(existing_def, dict) and "items" in existing_def
+                    and isinstance(new_def, dict) and "items" in new_def):
+                existing_items = existing_def["items"]
+                new_items = new_def["items"]
+                merged_def = dict(existing_def)
+
+                # Array of objects: merge items.properties
+                if (isinstance(existing_items, dict) and "properties" in existing_items
+                        and isinstance(new_items, dict) and "properties" in new_items):
+                    merged_item_props = self._merge_properties(
+                        existing_items.get("properties", {}),
+                        new_items.get("properties", {}),
+                    )
+                    merged_items = dict(existing_items)
+                    merged_items["properties"] = merged_item_props
+                    merged_def["items"] = merged_items
+
+                # Array of primitives: keep existing item type
+                merged[field_name] = merged_def
+                continue
+
+            # Same type, no nesting: keep existing definition
 
         return merged
 

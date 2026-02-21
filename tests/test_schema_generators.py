@@ -176,8 +176,8 @@ class TestSchemaGenerators:
         assert field_types["email"].name == "string"
         assert field_types["profile.firstName"].name == "string"
 
-        # Number types
-        assert field_types["age"].name == "int"
+        # Number types (all numerics coalesced to float/number)
+        assert field_types["age"].name == "float"
         assert field_types["height"].name == "float"
         assert field_types["profile.salary"].name == "float"
 
@@ -192,9 +192,9 @@ class TestSchemaGenerators:
         assert field_types["emptyArray"].name == "array"
 
         # Primitive array fields are inferred with their element type, not as arrays
-        # e.g., profile.tags is type="string", profile.scores is type="int"
+        # e.g., profile.tags is type="string", profile.scores is type="float"
         assert field_types["profile.tags"].name == "string"
-        assert field_types["profile.scores"].name == "int"
+        assert field_types["profile.scores"].name == "float"
         assert field_types["profile.ratings"].name == "float"
 
         # Object types
@@ -221,7 +221,7 @@ class TestSchemaGenerators:
         assert "email" in properties
         assert properties["email"]["type"] == ["string", "null"]
         assert "age" in properties
-        assert properties["age"]["type"] == ["integer", "null"]
+        assert properties["age"]["type"] == ["number", "null"]
         assert "height" in properties
         assert properties["height"]["type"] == ["number", "null"]
         assert "isActive" in properties
@@ -237,7 +237,7 @@ class TestSchemaGenerators:
         assert "firstName" in profile_props
         assert profile_props["firstName"]["type"] == ["string", "null"]
         assert "age" in profile_props
-        assert profile_props["age"]["type"] == ["integer", "null"]
+        assert profile_props["age"]["type"] == ["number", "null"]
         assert "salary" in profile_props
         assert profile_props["salary"]["type"] == ["number", "null"]
         assert "isEmployed" in profile_props
@@ -256,7 +256,7 @@ class TestSchemaGenerators:
 
         assert "scores" in profile_props
         assert profile_props["scores"]["type"] == "array"
-        assert profile_props["scores"]["items"] == {"type": "integer"}
+        assert profile_props["scores"]["items"] == {"type": "number"}
 
         assert "ratings" in profile_props
         assert profile_props["ratings"]["type"] == "array"
@@ -303,7 +303,7 @@ class TestSchemaGenerators:
         assert "email" in field_dict
         assert field_dict["email"]["type"] == ["null", "string"]
         assert "age" in field_dict
-        assert field_dict["age"]["type"] == ["null", "int"]
+        assert field_dict["age"]["type"] == ["null", "double"]
         assert "height" in field_dict
         assert field_dict["height"]["type"] == ["null", "double"]
         assert "isActive" in field_dict
@@ -330,7 +330,7 @@ class TestSchemaGenerators:
         assert "firstName" in profile_field_dict
         assert profile_field_dict["firstName"]["type"] == ["null", "string"]
         assert "age" in profile_field_dict
-        assert profile_field_dict["age"]["type"] == ["null", "int"]
+        assert profile_field_dict["age"]["type"] == ["null", "double"]
         assert "salary" in profile_field_dict
         assert profile_field_dict["salary"]["type"] == ["null", "double"]
         assert "isEmployed" in profile_field_dict
@@ -352,7 +352,7 @@ class TestSchemaGenerators:
         tags_type = profile_field_dict["tags"]["type"]
         assert {"type": "array", "items": "string"} in (tags_type if isinstance(tags_type, list) else [tags_type])
         scores_type = profile_field_dict["scores"]["type"]
-        assert {"type": "array", "items": "int"} in (scores_type if isinstance(scores_type, list) else [scores_type])
+        assert {"type": "array", "items": "double"} in (scores_type if isinstance(scores_type, list) else [scores_type])
         ratings_type = profile_field_dict["ratings"]["type"]
         assert {"type": "array", "items": "double"} in (ratings_type if isinstance(ratings_type, list) else [ratings_type])
 
@@ -379,7 +379,7 @@ class TestSchemaGenerators:
         # Test primitive types - _convert_field_to_protobuf preserves original casing
         assert any('string userId =' in line for line in lines)
         assert any('string email =' in line for line in lines)
-        assert any('int32 age =' in line for line in lines)
+        assert any('double age =' in line for line in lines)
         assert any('double height =' in line for line in lines)
         assert any('bool isActive =' in line for line in lines)
 
@@ -440,13 +440,13 @@ class TestSchemaGenerators:
         # JSON Schema -- all fields nullable
         json_schema_str = self.json_generator.generate(minimal_schema)
         json_schema = json.loads(json_schema_str)
-        assert json_schema["properties"]["id"]["type"] == ["integer", "null"]
+        assert json_schema["properties"]["id"]["type"] == ["number", "null"]
         assert json_schema["properties"]["name"]["type"] == ["string", "null"]
 
         # Avro -- all fields nullable (union with null)
         avro_schema_str = self.avro_generator.generate(minimal_schema)
         avro_schema = json.loads(avro_schema_str)
-        assert avro_schema["fields"][0]["type"] == ["null", "int"]
+        assert avro_schema["fields"][0]["type"] == ["null", "double"]
         assert avro_schema["fields"][1]["type"] == ["null", "string"]
 
         # Protobuf -- optional fields
@@ -518,7 +518,7 @@ class TestSchemaGenerators:
         assert json_schema["properties"]["string_array"]["type"] == "array"
         assert json_schema["properties"]["string_array"]["items"] == {"type": "string"}
         assert json_schema["properties"]["number_array"]["type"] == "array"
-        assert json_schema["properties"]["number_array"]["items"] == {"type": "integer"}
+        assert json_schema["properties"]["number_array"]["items"] == {"type": "number"}
         assert json_schema["properties"]["boolean_array"]["type"] == "array"
         assert json_schema["properties"]["boolean_array"]["items"] == {"type": "boolean"}
         assert json_schema["properties"]["object_array"]["type"] == "array"
@@ -539,7 +539,7 @@ class TestSchemaGenerators:
         assert {"type": "array", "items": "string"} in string_array_field["type"]
 
         number_array_field = next(f for f in avro_schema["fields"] if f["name"] == "number_array")
-        assert {"type": "array", "items": "int"} in number_array_field["type"]
+        assert {"type": "array", "items": "double"} in number_array_field["type"]
 
         boolean_array_field = next(f for f in avro_schema["fields"] if f["name"] == "boolean_array")
         assert {"type": "array", "items": "boolean"} in boolean_array_field["type"]
@@ -547,7 +547,7 @@ class TestSchemaGenerators:
         # Protobuf - arrays now use the repeated keyword
         protobuf_schema_str = self.protobuf_generator.generate(array_schema)
         assert 'repeated string string_array =' in protobuf_schema_str
-        assert 'repeated int32 number_array =' in protobuf_schema_str
+        assert 'repeated double number_array =' in protobuf_schema_str
         assert 'repeated bool boolean_array =' in protobuf_schema_str
     
     def test_deep_nesting(self):

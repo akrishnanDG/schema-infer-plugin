@@ -32,7 +32,7 @@ class TestSchemaInference:
         field_types = {field.name: field.field_type for field in schema.fields}
         
         assert field_types["string_field"].name == "string"
-        assert field_types["int_field"].name == "int"
+        assert field_types["int_field"].name == "float"
         assert field_types["float_field"].name == "float"
         assert field_types["boolean_field"].name == "boolean"
         # When all values are null, inference defaults to nullable string
@@ -59,16 +59,16 @@ class TestSchemaInference:
         # which loses the array flag. The type name reflects the element type.
         assert field_types["string_array"].name == "string"
 
-        assert field_types["number_array"].name == "int"
+        assert field_types["number_array"].name == "float"
 
         # Union strategy picks the most common element type (first when tied)
-        assert field_types["mixed_array"].name == "int"
+        assert field_types["mixed_array"].name == "float"
 
         # Empty arrays get type name "array"
         assert field_types["empty_array"].name == "array"
 
-        # Nested arrays: inner arrays are "array<int>", so type name is "array<int>"
-        assert field_types["nested_array"].name == "array<int>"
+        # Nested arrays: inner arrays are "array<float>", so type name is "array<float>"
+        assert field_types["nested_array"].name == "array<float>"
     
     def test_nested_object_inference(self):
         """Test inference of nested objects."""
@@ -98,7 +98,7 @@ class TestSchemaInference:
         # Check types
         field_types = {field.name: field.field_type for field in schema.fields}
         assert field_types["user.name"].name == "string"
-        assert field_types["user.age"].name == "int"
+        assert field_types["user.age"].name == "float"
         assert field_types["user.address.street"].name == "string"
         assert field_types["user.address.city"].name == "string"
     
@@ -123,7 +123,7 @@ class TestSchemaInference:
         
         # Check types
         field_types = {field.name: field.field_type for field in schema.fields}
-        assert field_types["items[].id"].name == "int"
+        assert field_types["items[].id"].name == "float"
         assert field_types["items[].name"].name == "string"
     
     def test_nullable_fields(self):
@@ -294,7 +294,7 @@ class TestSchemaInference:
         """Test InferredSchema creation and properties."""
         fields = [
             SchemaField("field1", FieldType("string"), True, "Field 1", {"example1"}),
-            SchemaField("field2", FieldType("int"), False, "Field 2", {"example2"})
+            SchemaField("field2", FieldType("float"), False, "Field 2", {"example2"})
         ]
         
         schema = InferredSchema(
@@ -317,13 +317,13 @@ class TestSchemaInference:
         union_inferrer = SchemaInferrer(array_handling="union")
         union_schema = union_inferrer.infer_schema(data, "union_test")
         union_field = next(f for f in union_schema.fields if f.name == "array")
-        assert union_field.field_type.name == "int"
+        assert union_field.field_type.name == "float"
         
         # Test first strategy
         first_inferrer = SchemaInferrer(array_handling="first")
         first_schema = first_inferrer.infer_schema(data, "first_test")
         first_field = next(f for f in first_schema.fields if f.name == "array")
-        assert first_field.field_type.name == "int"  # First element type
+        assert first_field.field_type.name == "float"  # First element type
         
         # Test all strategy
         all_inferrer = SchemaInferrer(array_handling="all")
