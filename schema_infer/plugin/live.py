@@ -95,6 +95,7 @@ class LiveModeOrchestrator:
         self._topic_formats: Dict[str, str] = {}  # Cached detected format per topic
         self._topic_discriminators: Dict[str, Optional[str]] = {}  # Cached discriminator per topic
         self._disc_record_counts: Dict[str, int] = {}  # Records since last discriminator check
+        self._topic_flat_registered: Set[str] = set()  # Topics with flat schemas already in SR
         self._topic_event_types: Dict[str, Set[str]] = {}  # Known event types per topic
         self._topic_last_activity: Dict[str, float] = {}
         self._shutdown = False
@@ -555,6 +556,23 @@ class LiveModeOrchestrator:
         except Exception:
             pass
 
+        # If transitioning from flat to multi-event, temporarily set compatibility to NONE
+        main_subject = self.registry._generate_subject_name(
+            topic_name, self.schema_format
+        )
+        previous_compat = None
+        if topic_name in self._topic_flat_registered:
+            try:
+                config_resp = self.registry.get_config(subject=main_subject)
+                previous_compat = config_resp.get("compatibilityLevel", self.config.schema_registry.compatibility)
+            except Exception:
+                previous_compat = self.config.schema_registry.compatibility
+            try:
+                self.registry.set_config({"compatibility": "NONE"}, subject=main_subject)
+                click.echo(f"[{_ts()}] {topic_name}: Transitioning from flat to multi-event, temporarily set compatibility to NONE")
+            except Exception as e:
+                click.echo(f"[{_ts()}] {topic_name}: Failed to set compatibility for transition: {e}", err=True)
+
         # Register
         try:
             reg_result = self.registry.register_multi_event_schemas(
@@ -562,6 +580,7 @@ class LiveModeOrchestrator:
             )
             with self._stats_lock:
                 self._total_registrations += len(reg_result)
+            self._topic_flat_registered.discard(topic_name)
             click.echo(
                 f"[{_ts()}] {topic_name}: Registered {len(reg_result)} multi-event schemas "
                 f"({len(sub_contents)} sub + 1 main)"
@@ -571,6 +590,14 @@ class LiveModeOrchestrator:
                 f"[{_ts()}] {topic_name}: Multi-event registration failed: {e}",
                 err=True,
             )
+
+        # Restore compatibility after transition
+        if previous_compat:
+            try:
+                self.registry.set_config({"compatibility": previous_compat}, subject=main_subject)
+                click.echo(f"[{_ts()}] {topic_name}: Restored compatibility to {previous_compat}")
+            except Exception:
+                pass
 
         # Write main schema file
         if self.output_dir:
@@ -788,6 +815,7 @@ class LiveModeOrchestrator:
                 schema_id = self.registry.register_schema(
                     topic_name, schema_content, self.schema_format
                 )
+                self._topic_flat_registered.add(topic_name)
                 label = "Initial schema registered" if is_initial else "Schema updated"
                 click.echo(f"[{_ts()}] {topic_name}: {label} (ID: {schema_id})")
                 with self._stats_lock:
