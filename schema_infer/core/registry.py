@@ -183,12 +183,18 @@ class SchemaRegistry:
                 subject_override=subject,
             )
             result[subject] = schema_id
+            # Get actual version after registration for accurate references
+            try:
+                latest = self.get_latest_schema(subject)
+                version = latest.get("version", 1)
+            except Exception:
+                version = 1
             references.append({
                 "name": subject,
                 "subject": subject,
-                "version": 1,
+                "version": version,
             })
-            self.logger.info(f"Registered sub-schema '{subject}' with ID {schema_id}")
+            self.logger.info(f"Registered sub-schema '{subject}' with ID {schema_id}, version {version}")
 
         # Register main schema with references
         main_schema_id = self.register_schema(

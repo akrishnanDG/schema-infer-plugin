@@ -94,6 +94,7 @@ class LiveModeOrchestrator:
         self._states_lock = threading.Lock()
         self._topic_formats: Dict[str, str] = {}  # Cached detected format per topic
         self._topic_discriminators: Dict[str, Optional[str]] = {}  # Cached discriminator per topic
+        self._disc_record_counts: Dict[str, int] = {}  # Records since last discriminator check
         self._topic_event_types: Dict[str, Set[str]] = {}  # Known event types per topic
         self._topic_last_activity: Dict[str, float] = {}
         self._shutdown = False
@@ -337,10 +338,18 @@ class LiveModeOrchestrator:
         if not parsed_records:
             return
 
-        # Detect discriminator on first batch (JSON Schema only)
+        # Detect discriminator — re-evaluate periodically until one is found (JSON Schema only)
         discriminator = None
         if self.schema_format == "json-schema":
-            if topic_name not in self._topic_discriminators:
+            self._disc_record_counts[topic_name] = self._disc_record_counts.get(topic_name, 0) + len(parsed_records)
+            should_check = (
+                topic_name not in self._topic_discriminators
+                or (self._topic_discriminators[topic_name] is None
+                    and self._disc_record_counts.get(topic_name, 0) >= 500)
+            )
+
+            if should_check:
+                self._disc_record_counts[topic_name] = 0
                 from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
                 analyzer = SchemaAnalyzer(
                     confidence_threshold=self.config.inference.confidence_threshold,
@@ -352,7 +361,7 @@ class LiveModeOrchestrator:
                     self._topic_event_types[topic_name] = set()
                     click.echo(f"[{_ts()}] {topic_name}: Detected discriminator field '{disc}'")
 
-            discriminator = self._topic_discriminators[topic_name]
+            discriminator = self._topic_discriminators.get(topic_name)
 
         if discriminator:
             self._process_multi_event_batch(topic_name, parsed_records, discriminator)
