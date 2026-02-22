@@ -130,7 +130,7 @@ class SchemaInferrer:
     def __init__(
         self,
         confidence_threshold: float = 0.8,
-        max_depth: int = 10,
+        max_depth: int = 20,
         array_handling: str = "union",
         null_handling: str = "optional"
     ):
