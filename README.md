@@ -17,7 +17,7 @@ A CLI plugin that infers and generates schemas from Kafka topic data. Supports J
 - **Schema Registry Integration**: Automatic registration with compatibility management
 - **Multi-Event Detection**: Auto-detect topics with multiple event types, generate per-type schemas with `oneOf` references using accurate SR version numbers; discriminator re-evaluation runs on every batch cycle in live mode
 - **Production Ready**: Schema validation, retry logic, deep recursive schema merging (objects + array items), flat-to-multi-event transition handling, and comprehensive error handling
-- **Continuous Monitoring**: Watch mode for automatic schema inference on new topics
+- **Continuous Monitoring**: Live mode automatically discovers new topics matching prefix/pattern filters
 - **Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas with `--from-beginning` bootstrap support
 - **Horizontal Scaling**: Thread-safe multi-instance support with shared consumer groups for 1000+ topics
 
@@ -225,23 +225,9 @@ events-payment_processed  # sub-schema subject
 events-value              # main schema with references to sub-schemas
 ```
 
-> **Note:** Multi-event detection, schema references, and schema merging are JSON Schema features only. Avro and Protobuf formats use flat schemas. Multi-event is supported in both `infer` and `live` modes for JSON Schema. Watch mode uses flat schemas.
+> **Note:** Multi-event detection, schema references, and schema merging are JSON Schema features only. Avro and Protobuf formats use flat schemas. Multi-event is supported in both `infer` and `live` modes for JSON Schema.
 
-### Watch Mode (New Topic Detection)
-```bash
-# Watch for new topics and auto-register schemas
-schema-infer --config config.yaml watch --register --context production
-
-# Custom interval and format
-schema-infer --config config.yaml watch --interval 30 --format json-schema --output-dir ./schemas
-
-# Watch with topic filtering
-schema-infer --config config.yaml watch --topic-pattern "prod-.*" --register --context prod
-```
-
-Watch mode continuously polls the cluster, detects new topics, infers schemas, and optionally registers them to Schema Registry. Topics are only processed once.
-
-### Live Consumer Mode (Schema Evolution Detection)
+### Live Consumer Mode (Schema Evolution and Topic Discovery)
 ```bash
 # Continuously monitor a topic and register evolving schemas
 schema-infer --config config.yaml live --topic orders --register
@@ -266,7 +252,7 @@ schema-infer --config config.yaml live \
   --topic orders --register --on-incompatible force
 ```
 
-Unlike `watch` (which only detects new topics), `live` mode continuously reads new messages from existing topics, incrementally builds schemas, detects schema evolution (new fields, type changes), and re-registers updated schemas. By default, live mode only processes new messages (`latest`). Use `--from-beginning` to bootstrap schemas from existing topic data. Consumer offsets are tracked via Kafka consumer groups for resume-on-restart.
+Live mode continuously reads new messages from topics, discovers new topics matching prefix/pattern filters, incrementally builds schemas, detects schema evolution (new fields, type changes), and re-registers updated schemas. By default, live mode only processes new messages (`latest`). Use `--from-beginning` to bootstrap schemas from existing topic data. Consumer offsets are tracked via Kafka consumer groups for resume-on-restart.
 
 ### Performance Optimization
 ```bash
@@ -348,7 +334,7 @@ resource "confluent_schema" "inferred" {
 }
 ```
 
-For the full Terraform guide including config file usage, module variables, `watch`/`live` mode integration, and CI/CD patterns, see [TERRAFORM.md](TERRAFORM.md).
+For the full Terraform guide including config file usage, module variables, `live` mode integration, and CI/CD patterns, see [TERRAFORM.md](TERRAFORM.md).
 
 ## Using with Confluent Tableflow
 

@@ -144,7 +144,7 @@ schema-infer --config platform-config.yaml infer --topic my-topic --format avro
 
 ## Live Consumer Mode (Schema Evolution)
 
-Track how your data evolves over time. Unlike `infer` (one-shot) or `watch` (new topics only), `live` mode continuously consumes messages and detects schema changes.
+Track how your data evolves over time. Unlike `infer` (one-shot), `live` mode continuously consumes messages, discovers new topics matching prefix/pattern filters, and detects schema changes.
 
 ### Quick Start with Live Mode
 
@@ -163,7 +163,7 @@ schema-infer --config config.yaml live \
 | I want to... | Use |
 |---|---|
 | Generate a schema from existing data | `infer` |
-| Auto-infer schemas when new topics appear | `watch` |
+| Auto-infer schemas when new topics appear | `live` with `--topic-prefix` or `--topic-pattern` |
 | Track schema evolution in existing topics | `live` |
 | Enforce data contracts in production | `live --on-incompatible fail` |
 | Scale to 1000+ topics | `live` with multiple instances sharing a consumer group |

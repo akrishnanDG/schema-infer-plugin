@@ -463,47 +463,9 @@ schema-infer validate-topics --topics "user-events,order-events"
 schema-infer validate-topics --topics "user-events" --check-connectivity --check-schema-registry
 ```
 
-#### `watch` - Continuous Monitoring
+#### `live` - Live Consumer Mode (Schema Evolution and Topic Discovery)
 
-Continuously monitor the cluster for new topics, infer schemas, and register them automatically.
-
-```bash
-# Basic watch with registration
-schema-infer --config config.yaml watch --register --context production
-
-# Watch with custom settings
-schema-infer --config config.yaml watch \
-  --topic-pattern "prod-.*" \
-  --format avro \
-  --register \
-  --context production \
-  --interval 30 \
-  --max-messages 100 \
-  --output-dir ./schemas
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--topic-pattern` | `.*` | Regex pattern to filter topics |
-| `--format` | `avro` | Schema format (avro, protobuf, json-schema) |
-| `--output-dir` | `./schemas` | Directory for schema files |
-| `--register` | off | Register schemas to Schema Registry |
-| `--context` | none | Schema Registry context prefix |
-| `--interval` | `60` | Polling interval in seconds |
-| `--max-messages` | `50` | Messages to sample per topic |
-| `--exclude-internal` | on | Exclude internal topics |
-
-The watch command:
-- Detects new topics on each polling cycle
-- Infers schemas and saves to disk
-- Validates schemas before registration
-- Skips previously processed topics
-- Handles errors gracefully without stopping
-- Stops cleanly on Ctrl+C with a summary
-
-#### `live` - Live Consumer Mode (Schema Evolution)
-
-Continuously consume messages from Kafka topics, incrementally build schemas, detect schema evolution, and re-register updated schemas to Schema Registry. Unlike `infer` (one-shot) and `watch` (new topics only), `live` tracks how data shapes change over time in existing topics.
+Continuously consume messages from Kafka topics, incrementally build schemas, detect schema evolution, discover new topics matching prefix/pattern filters, and re-register updated schemas to Schema Registry. Unlike `infer` (one-shot), `live` runs continuously and tracks how data shapes change over time.
 
 ```bash
 # Basic: monitor one topic and register changes
@@ -562,15 +524,15 @@ The live command:
 
 ##### Choosing the Right Command
 
-| | `infer` | `watch` | `live` |
-|---|---------|---------|--------|
-| **Purpose** | One-shot schema generation | Detect new topics | Track schema evolution |
-| **Runs** | Once, then exits | Continuously (polls for new topics) | Continuously (consumes messages) |
-| **Processes** | Existing messages | New topics only (each topic once) | New messages on existing topics |
-| **Schema updates** | No | No | Yes -- detects field additions, type changes |
-| **Offset tracking** | No (reads recent messages) | No | Yes (consumer group) |
-| **Resume on restart** | N/A | No (in-memory set) | Yes (persisted state + committed offsets) |
-| **Best for** | Initial schema bootstrap | Topic discovery automation | Production schema governance |
+| | `infer` | `live` |
+|---|---------|--------|
+| **Purpose** | One-shot schema generation | Track schema evolution and discover new topics |
+| **Runs** | Once, then exits | Continuously (consumes messages, discovers new topics) |
+| **Processes** | Existing messages | New messages on existing topics + new topics matching filters |
+| **Schema updates** | No | Yes -- detects field additions, type changes |
+| **Offset tracking** | No (reads recent messages) | Yes (consumer group) |
+| **Resume on restart** | N/A | Yes (persisted state + committed offsets) |
+| **Best for** | Initial schema bootstrap | Production schema governance and topic discovery |
 
 ##### Incompatibility Strategies
 
@@ -968,7 +930,7 @@ For a topic `events` with `user_created` and `payment_processed` events:
 
 - Multi-event detection, schema references, and schema merging are **JSON Schema only** features
 - Avro and Protobuf formats always produce flat schemas regardless of topic content
-- Multi-event is supported in `infer` and `live` modes for JSON Schema; watch mode uses flat schemas
+- Multi-event is supported in `infer` and `live` modes for JSON Schema
 - Using `--discriminator` with `--format avro` or `--format protobuf` will show a warning and fall back to flat schema
 
 ### Topic Filtering
@@ -1211,7 +1173,7 @@ output "registered_subjects" {
 
 ### Alternative: Generate Schemas Separately, Register with Terraform
 
-Instead of inferring schemas inline during `terraform plan`, you can generate schema files separately using the CLI and have Terraform read them from disk. This decouples schema generation from Terraform runs, allows human review, and works with `watch` and `live` modes.
+Instead of inferring schemas inline during `terraform plan`, you can generate schema files separately using the CLI and have Terraform read them from disk. This decouples schema generation from Terraform runs, allows human review, and works with `live` mode.
 
 #### One-Shot Generation
 
@@ -1221,18 +1183,9 @@ schema-infer --config cc-config.yaml infer \
   --topic-pattern ".*" --format avro --output-dir ./schemas/ --exclude-internal
 ```
 
-#### Continuous Detection with Watch Mode
+#### Continuous Detection and Schema Evolution with Live Mode
 
-Run as a service to detect new topics and generate schema files automatically:
-
-```bash
-schema-infer --config cc-config.yaml watch \
-  --topic-pattern ".*" --format avro --output-dir ./schemas/ --interval 60
-```
-
-#### Schema Evolution with Live Mode
-
-Run as a service to continuously consume messages, detect schema evolution, and update schema files:
+Run as a service to continuously consume messages, discover new topics, detect schema evolution, and update schema files:
 
 ```bash
 schema-infer --config cc-config.yaml live \
@@ -1470,7 +1423,7 @@ The tool requires specific permissions for both Kafka cluster access and Schema 
 | Operation | Resource Type | Resource | Permission | Used By |
 |-----------|--------------|----------|------------|---------|
 | `DESCRIBE` | Cluster | `kafka-cluster` | Cluster-level metadata access | All commands |
-| `DESCRIBE` | Topic | `*` or specific topics | List and discover topics | `list-topics`, `watch`, `infer` with `--topic-prefix`/`--topic-pattern` |
+| `DESCRIBE` | Topic | `*` or specific topics | List and discover topics | `list-topics`, `infer` with `--topic-prefix`/`--topic-pattern`, `live` with `--topic-prefix`/`--topic-pattern` |
 | `READ` | Topic | Target topic(s) | Consume messages from topics | `infer`, `live` |
 | `READ` | Consumer Group | `schema-infer-*` | Consumer group membership | `infer`, `live` |
 
@@ -1512,7 +1465,7 @@ RBAC provides a more granular and manageable alternative to ACLs. The table belo
 | Infer only (no registration) | `DeveloperRead` | Topic-level or cluster-level | Read messages and list topics |
 | Infer + register | `DeveloperRead` | Topic-level or cluster-level | Same as above; registration is a Schema Registry operation |
 | Live mode | `DeveloperRead` | Topic-level or cluster-level | Continuous consumption requires the same read permissions |
-| Topic discovery (`list-topics`, `watch`) | `DeveloperRead` | Cluster-level | Needs `DESCRIBE` on all topics to discover them |
+| Topic discovery (`list-topics`, `live` with filters) | `DeveloperRead` | Cluster-level | Needs `DESCRIBE` on all topics to discover them |
 
 **Schema Registry Roles**
 

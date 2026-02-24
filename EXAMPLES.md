@@ -935,48 +935,7 @@ jobs:
         path: schemas/
 ```
 
-### Example 13: Continuous Monitoring with Watch Mode
-
-**Scenario**: Automatically detect and register schemas for new topics in a production cluster.
-
-**Basic watch with registration**:
-```bash
-# Watch all topics and register Avro schemas under a context
-schema-infer --config prod-config.yaml watch \
-  --register --context production --interval 60
-```
-
-**Watch with filtering and custom output**:
-```bash
-# Only watch production topics, save JSON schemas
-schema-infer --config prod-config.yaml watch \
-  --topic-pattern "prod-.*" \
-  --format json-schema \
-  --register --context prod-schemas \
-  --interval 30 \
-  --output-dir ./production-schemas
-```
-
-**Expected output**:
-```
-Watching for new topics (interval: 60s, format: avro)
-  Registering schemas to Schema Registry under context 'production'
-  Output: ./schemas/
-  Pattern: .*
-  Press Ctrl+C to stop
-
-[10:00:00] Cycle 1: Found 5 new topic(s)
-  Processing orders... saved + registered (ID: 1)
-  Processing users... saved + registered (ID: 2)
-  Processing events... saved + registered (ID: 3)
-  Processing logs... saved + registered (ID: 4)
-  Processing metrics... skipped (empty)
-[10:01:00] Cycle 2: No new topics (5 total, 5 processed)
-[10:02:00] Cycle 3: Found 1 new topic(s)
-  Processing payments... saved + registered (ID: 5)
-```
-
-### Example 14: Docker Integration
+### Example 13: Docker Integration
 
 **Scenario**: Run schema generation in Docker containers.
 

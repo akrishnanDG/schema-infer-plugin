@@ -303,70 +303,9 @@ terraform plan    # shows schemas to register (no Kafka connection needed)
 terraform apply   # registers to Schema Registry
 ```
 
-### Continuous Generation with `watch` Mode
+### Continuous Detection and Schema Evolution with `live` Mode
 
-Use `watch` mode to automatically detect new topics and generate schema files. A CI/CD pipeline then triggers `terraform apply` when new files appear.
-
-```
-┌─────────────────────────────────────┐
-│  schema-infer watch                 │
-│  (runs continuously as a service)   │
-│                                     │
-│  Detects new topics, infers schemas │
-│  Writes .json files to ./schemas/   │
-└──────────────┬──────────────────────┘
-               │ new schema files
-               ▼
-┌─────────────────────────────────────┐
-│  Git commit + push (or S3 sync)     │
-│  triggers CI/CD pipeline            │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│  terraform plan / apply             │
-│  registers new schemas to SR        │
-└─────────────────────────────────────┘
-```
-
-**Run watch mode (does NOT register directly -- output only):**
-
-```bash
-schema-infer --config cc-config.yaml watch \
-  --topic-pattern ".*" \
-  --format json-schema \
-  --output-dir ./schemas/ \
-  --interval 60 \
-  --exclude-internal
-```
-
-Watch mode polls the cluster every 60 seconds, detects new topics, infers their schemas, and writes `.json` files. Each topic is only processed once.
-
-**Terraform config reads whatever files exist:**
-
-```hcl
-locals {
-  schema_files = fileset("${path.module}/schemas", "*.json")
-  topic_schemas = {
-    for f in local.schema_files :
-    trimsuffix(f, ".json") => file("${path.module}/schemas/${f}")
-  }
-}
-
-resource "confluent_schema" "watched" {
-  for_each     = local.topic_schemas
-  subject_name = "${each.key}-value"
-  format       = "JSON"
-  schema       = each.value
-  # ... cluster config, credentials
-}
-```
-
-When watch mode writes a new schema file, commit it to git and run `terraform apply` (manually or via CI/CD trigger).
-
-### Schema Evolution with `live` Mode
-
-Use `live` mode to continuously consume messages, detect schema evolution (new fields, type changes), and update schema files. Terraform then registers the updated versions.
+Use `live` mode to continuously consume messages, discover new topics matching prefix/pattern filters, detect schema evolution (new fields, type changes), and update schema files. Terraform then registers the updated versions.
 
 ```
 ┌─────────────────────────────────────┐
@@ -374,6 +313,7 @@ Use `live` mode to continuously consume messages, detect schema evolution (new f
 │  (runs continuously as a service)   │
 │                                     │
 │  Consumes new messages              │
+│  Discovers new topics               │
 │  Detects schema changes             │
 │  Overwrites .json files on change   │
 └──────────────┬──────────────────────┘
@@ -440,15 +380,13 @@ jobs:
 |----------|-------------------|------------------|-------------|-----------|
 | **Module (inline)** | During `terraform plan` | Infers + registers | No (automatic) | Per plan run |
 | **`infer` + file()** | Manual CLI run | Registers only | Yes | No |
-| **`watch` + file()** | Continuous (new topics) | Registers only | Yes (via PR) | Near real-time |
-| **`live` + file()** | Continuous (evolution) | Registers only | Yes (via PR) | Real-time |
+| **`live` + file()** | Continuous (evolution + new topic discovery) | Registers only | Yes (via PR) | Real-time |
 
 **When to use which:**
 
 - **Module (inline)**: Simplest setup, good for stable environments with known topics
 - **`infer` + file()**: Best for initial schema bootstrap with human review before registration
-- **`watch` + file()**: Best for environments where new topics appear regularly and need auto-discovery
-- **`live` + file()**: Best for production schema governance where data shapes evolve over time
+- **`live` + file()**: Best for production schema governance where data shapes evolve over time and new topics need auto-discovery
 
 ## Integration with Confluent Tableflow
 
