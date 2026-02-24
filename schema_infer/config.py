@@ -141,6 +141,7 @@ class LiveConfig(BaseModel):
     idle_evict_seconds: int = Field(default=3600, description="Evict idle topic state from memory after this many seconds")
     max_concurrent_registrations: int = Field(default=5, description="Max parallel schema registrations (rate-limiting)")
     summary_interval_seconds: int = Field(default=60, description="Interval for periodic status summary (useful for many topics)")
+    topic_discovery_interval_seconds: int = Field(default=300, description="Re-discover topics matching prefix/pattern every N seconds (0 to disable)")
     on_incompatible: str = Field(default="skip", description="Behavior when schema is incompatible: skip, log, force, fail")
 
     @field_validator('initial_offset')

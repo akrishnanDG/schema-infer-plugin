@@ -68,9 +68,10 @@ class LiveModeOrchestrator:
         context: Optional[str],
         on_incompatible: str,
         data_format: str,
+        topic_discovery_kwargs: Optional[Dict[str, Any]] = None,
     ):
         self.config = config
-        self.topics = topics
+        self.topics = list(topics)
         self.schema_format = schema_format
         self.register = register
         self.output_dir = output_dir
@@ -79,6 +80,8 @@ class LiveModeOrchestrator:
         self.on_incompatible = on_incompatible
         self.data_format = data_format
         self.logger = get_logger(__name__)
+        self._topic_discovery_kwargs = topic_discovery_kwargs
+        self._last_discovery_time = 0.0
 
         # Auto-scale batch_size and workers based on topic count
         topic_count = len(topics)
@@ -199,6 +202,7 @@ class LiveModeOrchestrator:
                     on_revoked=self._on_topics_revoked,
                 )
                 consumer.subscribe(self.topics)
+                self._last_discovery_time = time.time()
 
                 while not self._shutdown:
                     # Poll a batch
@@ -210,8 +214,11 @@ class LiveModeOrchestrator:
                         self._process_batch(topic_messages)
                         consumer.commit()
 
-                    # Periodic summary for large topic sets
+                    # Periodic topic re-discovery
                     now = time.time()
+                    self._rediscover_topics(consumer, now)
+
+                    # Periodic summary for large topic sets
                     if (
                         now - self._last_summary_time
                         >= self.config.live.summary_interval_seconds
@@ -309,6 +316,30 @@ class LiveModeOrchestrator:
                 f"[{_ts()}] Rebalance: persisted state for {persisted} "
                 f"revoked topics"
             )
+
+    def _rediscover_topics(self, consumer: Any, now: float) -> None:
+        """Re-discover topics matching the original filters and resubscribe if new ones found."""
+        interval = self.config.live.topic_discovery_interval_seconds
+        if interval <= 0 or not self._topic_discovery_kwargs:
+            return
+        if now - self._last_discovery_time < interval:
+            return
+
+        self._last_discovery_time = now
+        try:
+            from ..core.discovery import TopicDiscovery
+            discovery = TopicDiscovery(self.config)
+            current_topics = discovery.discover_topics(**self._topic_discovery_kwargs)
+            new_topics = set(current_topics) - set(self.topics)
+            if new_topics:
+                self.topics = sorted(set(self.topics) | new_topics)
+                consumer.subscribe(self.topics)
+                click.echo(
+                    f"[{_ts()}] Discovered {len(new_topics)} new topics: "
+                    f"{', '.join(sorted(new_topics))}"
+                )
+        except Exception as e:
+            self.logger.warning(f"Topic re-discovery failed: {e}")
 
     def _owns_partition_zero(self, topic_name: str) -> bool:
         """Check if this instance owns partition 0 of the topic.

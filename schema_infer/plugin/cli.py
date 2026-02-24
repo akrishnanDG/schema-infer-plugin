@@ -1534,6 +1534,17 @@ def live(
     config.auto_detect_format = data_format == "auto"
     config.forced_data_format = data_format if data_format != "auto" else None
 
+    # Build discovery kwargs for periodic re-discovery in live mode
+    topic_discovery_kwargs = None
+    if topic_prefix or topic_pattern:
+        topic_discovery_kwargs = {
+            "topic": topic,
+            "topics": topics,
+            "topic_prefix": topic_prefix,
+            "topic_pattern": topic_pattern,
+            "exclude_internal": exclude_internal,
+        }
+
     # Create and run the orchestrator
     from ..plugin.live import LiveModeOrchestrator
 
@@ -1550,6 +1561,7 @@ def live(
         context=context,
         on_incompatible=effective_on_incompatible,
         data_format=data_format,
+        topic_discovery_kwargs=topic_discovery_kwargs,
     )
 
     orchestrator.run()
