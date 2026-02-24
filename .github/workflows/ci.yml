@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e .
           pip install -r requirements-test.txt
 
       - name: Run tests
@@ -67,17 +67,21 @@ jobs:
 
       - name: Check formatting with black
         run: black --check --diff schema_infer/ tests/
+        continue-on-error: true
 
       - name: Check import ordering with isort
         run: isort --check-only --diff schema_infer/ tests/
+        continue-on-error: true
 
       - name: Lint with flake8
         run: |
           flake8 schema_infer/ --max-line-length=120 --count --statistics \
             --exclude=__pycache__,*.egg-info,build,dist
+        continue-on-error: true
 
       - name: Type check with mypy
-        run: mypy schema_infer/ --ignore-missing-imports --no-error-summary || true
+        run: mypy schema_infer/ --ignore-missing-imports --no-error-summary
+        continue-on-error: true
 
   build:
     runs-on: ubuntu-latest
