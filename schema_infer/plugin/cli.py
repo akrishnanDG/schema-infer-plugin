@@ -27,7 +27,7 @@ from ..utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 # Plugin version information
-PLUGIN_VERSION = "1.4.1"
+PLUGIN_VERSION = "1.4.2"
 PLUGIN_BUILD = "2026-02-24"
 
 
