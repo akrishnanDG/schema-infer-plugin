@@ -57,6 +57,49 @@ pip install .
 schema-infer --help
 ```
 
+### Standalone Binaries
+
+Pre-built binaries are available on the [Releases](https://github.com/akrishnanDG/schema-infer-plugin/releases) page. No Python installation required.
+
+```bash
+# Download (example: macOS Apple Silicon)
+curl -L -o schema-infer \
+  https://github.com/akrishnanDG/schema-infer-plugin/releases/latest/download/schema-infer-macos-arm64
+chmod +x schema-infer
+./schema-infer --help
+```
+
+### Docker
+
+```bash
+# Build
+docker build -t schema-infer .
+
+# Run with a config file
+docker run --rm -v $(pwd)/config.yaml:/app/config.yaml \
+  schema-infer --config /app/config.yaml infer --topic my-topic
+
+# Run with inline Confluent Cloud credentials
+docker run --rm schema-infer \
+  --bootstrap-servers pkc-xxxxx.us-east-1.aws.confluent.cloud:9092 \
+  --kafka-api-key YOUR_KEY --kafka-api-secret YOUR_SECRET \
+  --schema-registry-url https://psrc-xxxxx.us-east-1.aws.confluent.cloud \
+  --sr-api-key YOUR_SR_KEY --sr-api-secret YOUR_SR_SECRET \
+  infer --topic orders --register
+
+# Write schemas to a local directory
+docker run --rm -v $(pwd)/schemas:/app/schemas \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  schema-infer --config /app/config.yaml infer \
+  --topic-pattern ".*" --output-dir /app/schemas --register
+
+# Live mode
+docker run --rm -v $(pwd)/config.yaml:/app/config.yaml \
+  -v $(pwd)/state:/app/state \
+  schema-infer --config /app/config.yaml live \
+  --topic orders --register --state-dir /app/state
+```
+
 ### Basic Usage
 
 ```bash

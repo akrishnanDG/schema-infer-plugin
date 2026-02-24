@@ -146,10 +146,58 @@ schema-infer --help
 # Build Docker image
 docker build -t schema-infer .
 
-# Run with Docker
-docker run -v $(pwd)/config:/app/config schema-infer \
-  --config /app/config/schema-infer.yaml infer --topic my-topic
+# Run with a config file (mount as volume)
+docker run --rm -v $(pwd)/config.yaml:/app/config.yaml \
+  schema-infer --config /app/config.yaml infer --topic my-topic
+
+# Write schemas to a local directory
+docker run --rm \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  -v $(pwd)/schemas:/app/schemas \
+  schema-infer --config /app/config.yaml infer \
+  --topic-pattern ".*" --output-dir /app/schemas --register
 ```
+
+#### Docker with Live Mode
+
+For live mode, mount a state directory to persist consumer offsets and schema state across container restarts:
+
+```bash
+docker run --rm \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  -v $(pwd)/state:/app/state \
+  schema-infer --config /app/config.yaml live \
+  --topic orders --register \
+  --state-dir /app/state \
+  --from-beginning
+```
+
+#### Docker Compose
+
+```yaml
+services:
+  schema-infer:
+    build: .
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./schemas:/app/schemas
+      - ./state:/app/state
+    command: >
+      --config /app/config.yaml live
+      --topic-pattern ".*"
+      --register
+      --output-dir /app/schemas
+      --state-dir /app/state
+    restart: unless-stopped
+```
+
+#### Docker Tips
+
+- Mount config files as read-only (`:ro`) to prevent accidental modification
+- Mount schema output and state directories as read-write for persistence
+- Use `--rm` for one-shot inference runs to clean up containers
+- Use `restart: unless-stopped` for long-running live mode containers
+- The image is based on `python:3.12-slim` (~150MB)
 
 ---
 
