@@ -49,8 +49,8 @@ class LiveConsumer:
         self._assigned_topics: Set[str] = set()
 
         # Rebalance callbacks for the orchestrator
-        self._on_topics_assigned: Optional[Callable[[Set[str]], None]] = None
-        self._on_topics_revoked: Optional[Callable[[Set[str]], None]] = None
+        self._on_topics_assigned: Optional[Callable[[Set[str], Dict[str, Set[int]]], None]] = None
+        self._on_topics_revoked: Optional[Callable[[Set[str], Dict[str, Set[int]]], None]] = None
 
         self._initialize_consumer()
 
@@ -134,6 +134,11 @@ class LiveConsumer:
             previously_assigned = self._assigned_topics.copy()
             self._assigned_topics = new_topics
 
+            # Build partition map: {topic_name: {0, 1, 2, ...}}
+            partition_map: Dict[str, Set[int]] = {}
+            for p in partitions:
+                partition_map.setdefault(p.topic, set()).add(p.partition)
+
             added = new_topics - previously_assigned
             if added:
                 self.logger.info(
@@ -141,7 +146,7 @@ class LiveConsumer:
                     f"({len(partitions)} partitions total)"
                 )
                 if self._on_topics_assigned:
-                    self._on_topics_assigned(added)
+                    self._on_topics_assigned(added, partition_map)
 
         def on_revoke(consumer, partitions):
             revoked_topics = {p.topic for p in partitions}
@@ -149,6 +154,12 @@ class LiveConsumer:
                 f"Topics revoked: {', '.join(sorted(revoked_topics))} "
                 f"({len(partitions)} partitions)"
             )
+
+            # Build partition map for revoked partitions
+            partition_map: Dict[str, Set[int]] = {}
+            for p in partitions:
+                partition_map.setdefault(p.topic, set()).add(p.partition)
+
             # Commit offsets for revoked partitions before they're taken away
             try:
                 consumer.commit(asynchronous=False)
@@ -157,7 +168,7 @@ class LiveConsumer:
 
             # Notify orchestrator to persist state for revoked topics
             if self._on_topics_revoked:
-                self._on_topics_revoked(revoked_topics)
+                self._on_topics_revoked(revoked_topics, partition_map)
 
             # Update assigned set
             self._assigned_topics -= revoked_topics
@@ -171,6 +182,14 @@ class LiveConsumer:
     def assigned_topics(self) -> Set[str]:
         """Topics currently assigned to this consumer instance."""
         return self._assigned_topics.copy()
+
+    @property
+    def assigned_partitions(self) -> Dict[str, Set[int]]:
+        """Mapping of topic name to assigned partition IDs."""
+        result: Dict[str, Set[int]] = {}
+        for p in self._assigned_partitions:
+            result.setdefault(p.topic, set()).add(p.partition)
+        return result
 
     def poll_batch(
         self, batch_size: int, batch_timeout_seconds: float

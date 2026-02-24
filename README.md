@@ -1,11 +1,11 @@
 # Schema Inference Plugin
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/example/schema-infer-plugin)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/example/schema-infer-plugin)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-comprehensive-green.svg)](tests/)
 
-A powerful CLI plugin that automatically infers and generates schemas from Kafka topic data. Supports multiple schema formats (JSON Schema, Avro, Protobuf) and handles complex nested data structures with comprehensive data type detection.
+A CLI plugin that infers and generates schemas from Kafka topic data. Supports JSON Schema, Avro, and Protobuf output formats with nested structure analysis and automatic type detection.
 
 ## Features
 
@@ -13,9 +13,9 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 - **Intelligent Data Analysis**: Automatic format detection, datetime/enum inference, deep nested analysis (max depth 20), and unified numeric types (all numbers inferred as `number`)
 - **High Performance**: Parallel processing and optimized message reading
 - **Flexible Topic Discovery**: Single topics, multiple topics, prefix/pattern matching
-- **Enterprise Security**: Full Confluent Cloud and Platform authentication support
+- **Enterprise Security**: Full Confluent Cloud and Confluent Platform authentication support
 - **Schema Registry Integration**: Automatic registration with compatibility management
-- **Multi-Event Detection**: Auto-detect topics with multiple event types, generate per-type schemas with `oneOf` references using accurate SR version numbers, and periodic discriminator re-evaluation
+- **Multi-Event Detection**: Auto-detect topics with multiple event types, generate per-type schemas with `oneOf` references using accurate SR version numbers; discriminator re-evaluation runs on every batch cycle in live mode
 - **Production Ready**: Schema validation, retry logic, deep recursive schema merging (objects + array items), flat-to-multi-event transition handling, and comprehensive error handling
 - **Continuous Monitoring**: Watch mode for automatic schema inference on new topics
 - **Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas with `--from-beginning` bootstrap support
@@ -25,11 +25,12 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 
 | Document | Description |
 |----------|-------------|
-| **[Complete Documentation](DOCUMENTATION.md)** | Comprehensive product documentation with all features |
-| **[Quick Start Guide](QUICK_START.md)** | Get up and running in minutes |
-| **[API Reference](API_REFERENCE.md)** | Complete API documentation and class references |
-| **[Examples](EXAMPLES.md)** | Comprehensive examples for all use cases |
+| **[Complete Documentation](DOCUMENTATION.md)** | Full product documentation covering all features |
+| **[Quick Start Guide](QUICK_START.md)** | Installation and first run |
+| **[API Reference](API_REFERENCE.md)** | API documentation and class references |
+| **[Examples](EXAMPLES.md)** | Usage examples for all supported workflows |
 | **[Testing Guide](TESTING.md)** | Testing documentation and examples |
+| **[Best Practices](BEST_PRACTICES.md)** | Production deployment and operational guidelines |
 | **[Using with Terraform](TERRAFORM.md)** | Terraform module integration guide |
 | **[Using with Tableflow](TABLEFLOW.md)** | Materialize topics as Iceberg/Delta tables |
 
@@ -271,19 +272,9 @@ schema_registry:
 
 ## Using with Terraform
 
-The Schema Inference Plugin integrates with the [Confluent Terraform Provider](https://registry.terraform.io/providers/confluentinc/confluent/latest) via a reusable Terraform module. Schemas are inferred automatically during `terraform plan` and registered to Confluent Cloud Schema Registry through `confluent_schema` resources.
+The plugin integrates with the [Confluent Terraform Provider](https://registry.terraform.io/providers/confluentinc/confluent/latest) via a reusable Terraform module. Schemas are inferred during `terraform plan` and registered to Confluent Cloud Schema Registry through `confluent_schema` resources.
 
 > **Note**: Terraform integration is supported with **Confluent Cloud** only.
-
-### Prerequisites
-
-- Terraform >= 1.0
-- Python 3.9+ (the module auto-installs `schema-infer` on first run)
-- A Confluent Cloud cluster with data in topics
-
-### Quick Start (Inline Variables)
-
-No YAML config file needed -- pass Confluent Cloud credentials directly as Terraform variables:
 
 ```hcl
 module "inferred_schemas" {
@@ -314,78 +305,7 @@ resource "confluent_schema" "inferred" {
 }
 ```
 
-### Using a Config File
-
-If you already have a `cc-config.yaml` for the CLI, you can reference it instead:
-
-```hcl
-module "inferred_schemas" {
-  source      = "github.com/akrishnanDG/terraform-schema-infer"
-  config_file = "${path.module}/cc-config.yaml"
-  topics      = ["orders", "payments", "users"]
-  format      = "avro"
-}
-```
-
-### How It Works
-
-1. `terraform plan` calls the `schema-infer` CLI via Terraform's `external` data source
-2. The CLI connects to Kafka, samples messages from each topic, and infers the schema
-3. The inferred schema string is passed to the `confluent_schema` resource
-4. `terraform apply` registers the schema in Schema Registry via the Confluent provider
-
-### Module Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `topics` | Yes | - | List of Kafka topic names to infer schemas from |
-| `format` | No | `avro` | Output format: `avro`, `protobuf`, or `json-schema` |
-| `max_messages` | No | `100` | Maximum messages to sample per topic |
-| `config_file` | No | - | Path to YAML config file (Option A) |
-| `bootstrap_servers` | No | - | Confluent Cloud bootstrap servers (Option B) |
-| `kafka_api_key` | No | - | Confluent Cloud Kafka API key (Option B) |
-| `kafka_api_secret` | No | - | Confluent Cloud Kafka API secret (Option B) |
-
-### Ongoing Usage
-
-- **New topic?** Add it to the `topics` list, run `terraform plan/apply`
-- **Schema evolved?** Run `terraform plan` -- it re-infers and shows the diff
-- **Remove a topic?** Remove from the list, `terraform apply` destroys the schema
-
-### Alternative: Generate Schemas Separately
-
-Instead of inferring inline during `terraform plan`, generate schema files first and let Terraform read them from disk. This allows human review and works with `watch` and `live` modes.
-
-```bash
-# Generate schema files
-schema-infer --config cc-config.yaml infer \
-  --topic-pattern ".*" --format avro --output-dir ./schemas/ --exclude-internal
-
-# Or run live mode to continuously update schemas as data evolves
-schema-infer --config cc-config.yaml live \
-  --topic-pattern ".*" --format avro --output-dir ./schemas/
-```
-
-```hcl
-# Terraform reads schema files from disk -- no Kafka connection during plan
-locals {
-  schema_files = fileset("${path.module}/schemas", "*.avsc")
-  topic_schemas = {
-    for f in local.schema_files :
-    trimsuffix(f, ".avsc") => file("${path.module}/schemas/${f}")
-  }
-}
-
-resource "confluent_schema" "inferred" {
-  for_each     = local.topic_schemas
-  subject_name = "${each.key}-value"
-  format       = "AVRO"
-  schema       = each.value
-  # ... cluster config, credentials
-}
-```
-
-For the full Terraform guide including `watch` mode, `live` mode, and CI/CD integration, see [TERRAFORM.md](TERRAFORM.md).
+For the full Terraform guide including config file usage, module variables, `watch`/`live` mode integration, and CI/CD patterns, see [TERRAFORM.md](TERRAFORM.md).
 
 ## Using with Confluent Tableflow
 
@@ -397,47 +317,16 @@ schema-infer --config cc-config.yaml infer \
   --topics "orders,payments,users" --format avro --register
 ```
 
-Or fully automated with Terraform:
+Tableflow can also be fully automated with Terraform by combining the schema inference module with `confluent_tableflow_topic` resources.
 
-```hcl
-# Infer schemas
-module "inferred_schemas" {
-  source            = "github.com/akrishnanDG/terraform-schema-infer"
-  bootstrap_servers = var.bootstrap_servers
-  kafka_api_key     = var.kafka_api_key
-  kafka_api_secret  = var.kafka_api_secret
-  topics            = ["orders", "payments", "users"]
-  format            = "avro"
-}
-
-# Register schemas
-resource "confluent_schema" "inferred" {
-  for_each     = module.inferred_schemas.schemas
-  subject_name = "${each.key}-value"
-  format       = "AVRO"
-  schema       = each.value
-  # ... cluster config, credentials
-}
-
-# Enable Tableflow
-resource "confluent_tableflow_topic" "materialized" {
-  for_each      = module.inferred_schemas.schemas
-  display_name  = each.key
-  table_formats = ["ICEBERG"]
-  managed_storage {}
-  depends_on    = [confluent_schema.inferred]
-  # ... environment, cluster, credentials
-}
-```
-
-For the full guide including live mode, file-based approach, and troubleshooting, see [TABLEFLOW.md](TABLEFLOW.md).
+For the full guide including Terraform integration, live mode, and troubleshooting, see [TABLEFLOW.md](TABLEFLOW.md).
 
 ## Use Cases
 
 - **Schema Migration**: Migrate from untyped to typed data systems
 - **API Documentation**: Generate schemas for API documentation
 - **Data Governance**: Establish data contracts and validation rules
-- **Development Acceleration**: Quickly bootstrap schema definitions
+- **Development Acceleration**: Bootstrap schema definitions from existing data
 - **Compliance**: Meet data governance and compliance requirements
 
 ## Examples
@@ -533,7 +422,7 @@ live:
 
 ## Testing
 
-The plugin includes comprehensive unit tests covering all functionality:
+The plugin includes unit tests covering all functionality:
 
 ```bash
 # Run all tests
@@ -558,7 +447,7 @@ python run_tests.py --coverage
 3. **Performance Issues**: Adjust timeout and worker settings
 4. **Memory Issues**: Increase memory limits or reduce batch sizes
 5. **Empty Topics**: When processing many topics, some may appear empty due to broker connection timeouts. The `infer` command uses a small reader pool (10 consumer connections) separate from the processing worker pool to avoid connection saturation. If you still see empty topics, try increasing `--timeout` to give readers more time per topic.
-6. **Schema Compatibility Errors**: Generated schemas use a closed content model (`additionalProperties: false`) which supports BACKWARD-compatible evolution (adding optional fields). If you see `PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL` errors, ensure your schemas use `additionalProperties: false` — an open content model (where `additionalProperties` is omitted or `true`) does not allow adding properties under BACKWARD compatibility on Confluent Cloud.
+6. **Schema Compatibility Errors**: Generated schemas use a closed content model (`additionalProperties: false`) which supports BACKWARD-compatible evolution (adding optional fields). If you see `PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL` errors, ensure your schemas use `additionalProperties: false` -- an open content model (where `additionalProperties` is omitted or `true`) does not allow adding properties under BACKWARD compatibility on Confluent Cloud.
 
 ### Debug Mode
 
@@ -586,8 +475,8 @@ Apache License 2.0
 - **Documentation**: [Complete Documentation](DOCUMENTATION.md)
 - **Issues**: [GitHub Issues](https://github.com/akrishnanDG/schema-infer-plugin/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/akrishnanDG/schema-infer-plugin/discussions)
-- **Support**: This is an open source tool, there is no support provided but please feel free to raise and fix issues.
+- **Support**: This is an open source tool with no formal support. Please report bugs and submit fixes via GitHub Issues.
 
 ---
 
-**Ready to get started?** Check out the [Quick Start Guide](QUICK_START.md) or dive into the [Complete Documentation](DOCUMENTATION.md) for comprehensive information about all features and capabilities.
+See the [Quick Start Guide](QUICK_START.md) for installation steps or the [Complete Documentation](DOCUMENTATION.md) for full reference.

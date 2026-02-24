@@ -2,12 +2,12 @@
 
 Get up and running with the Schema Inference Plugin in minutes.
 
-## 🚀 Prerequisites
+## Prerequisites
 
 - Python 3.9+
 - pip (included with Python; if missing, run `python3 -m ensurepip --upgrade`)
 
-## 🚀 Installation
+## Installation
 
 ```bash
 # Install directly from GitHub
@@ -25,7 +25,7 @@ pip install -e .
 schema-infer --help
 ```
 
-## ⚡ Basic Usage
+## Basic Usage
 
 ### 1. Single Topic Schema Generation
 
@@ -61,7 +61,7 @@ schema-infer infer --topic-prefix "prod-" --output-dir schemas/ --format json-sc
 schema-infer infer --topic user-events --format avro --register
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Basic Configuration File
 
@@ -89,11 +89,11 @@ performance:
 schema-infer --config config.yaml infer --topic my-topic --format avro
 ```
 
-## ☁️ Schema Inference Cloud Setup
+## Confluent Cloud Setup
 
 ### 1. Get Your Credentials
 
-From Schema Inference Cloud Console:
+From the Confluent Cloud Console:
 - Bootstrap servers
 - API key and secret
 - Schema Registry URL
@@ -102,14 +102,14 @@ From Schema Inference Cloud Console:
 
 ```yaml
 kafka:
-  bootstrap_servers: "pkc-xxxxx.us-west-2.aws.schema-infer.cloud:9092"
+  bootstrap_servers: "pkc-xxxxx.us-west-2.aws.confluent.cloud:9092"
   security_protocol: "SASL_SSL"
   sasl_mechanism: "PLAIN"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 
 schema_registry:
-  url: "https://psrc-xxxxx.us-west-2.aws.schema-infer.cloud"
+  url: "https://psrc-xxxxx.us-west-2.aws.confluent.cloud"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 ```
@@ -120,7 +120,7 @@ schema_registry:
 schema-infer --config cloud-config.yaml infer --topic my-topic --format avro
 ```
 
-## 🏢 Schema Inference Platform Setup
+## Confluent Platform Setup
 
 ### 1. Platform Config
 
@@ -142,7 +142,7 @@ schema_registry:
 schema-infer --config platform-config.yaml infer --topic my-topic --format avro
 ```
 
-## 🔴 Live Consumer Mode (Schema Evolution)
+## Live Consumer Mode (Schema Evolution)
 
 Track how your data evolves over time. Unlike `infer` (one-shot) or `watch` (new topics only), `live` mode continuously consumes messages and detects schema changes.
 
@@ -170,7 +170,7 @@ schema-infer --config config.yaml live \
 
 See the [Examples](EXAMPLES.md#live-consumer-examples) for detailed use-case walkthroughs.
 
-## 📊 Common Use Cases
+## Common Use Cases
 
 ### Generate Schemas for API Documentation
 
@@ -201,7 +201,7 @@ schema-infer --config config.yaml live \
 schema-infer infer --topic-prefix "iot-" --max-messages 10000 --format protobuf --output-dir iot-schemas/
 ```
 
-## 🔍 Discovery Commands
+## Discovery Commands
 
 ### List Topics
 
@@ -220,7 +220,7 @@ schema-infer list-topics --exclude-internal
 schema-infer validate-topics --topics "user-events,order-events"
 ```
 
-## 🎯 Tips & Tricks
+## Tips and Tricks
 
 ### Performance Optimization
 
@@ -249,7 +249,7 @@ schema-infer infer --topic-prefix "prod-" --exclude-internal
 schema-infer infer --topic-prefix "app-" --internal-prefix "internal-"
 ```
 
-## 🆘 Troubleshooting
+## Troubleshooting
 
 ### Connection Issues
 
@@ -284,13 +284,13 @@ schema-infer infer --help
 schema-infer list-topics --help
 ```
 
-## 📚 Next Steps
+## Next Steps
 
 1. **Read the full documentation**: [DOCUMENTATION.md](DOCUMENTATION.md)
 2. **Explore examples**: [examples/](examples/) directory
 3. **Run tests**: `python run_tests.py`
 4. **Join the community**: GitHub Issues and Discussions
 
-## 🎉 You're Ready!
+## You're Ready
 
-You now have everything you need to start generating schemas from your Kafka topics. Happy schema inferring! 🚀
+You now have everything you need to start generating schemas from your Kafka topics.

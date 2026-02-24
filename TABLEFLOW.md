@@ -97,7 +97,7 @@ module "inferred_schemas" {
 
   topics       = local.topics
   format       = "json-schema"
-  max_messages = 100
+  max_messages = 50
 }
 
 # Step 2: Register schemas to Schema Registry

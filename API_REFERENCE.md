@@ -47,10 +47,10 @@ schema-infer infer [OPTIONS]
 | `--output-dir` | `-d` | String | Output directory (multiple topics) | None |
 | `--format` | `-f` | String | Schema format (json-schema, avro, protobuf) | json-schema |
 | `--register` | `-r` | Boolean | Register schema in Schema Registry | False |
-| `--max-messages` | `-m` | Integer | Maximum messages to read | 1000 |
-| `--timeout` | `-T` | Integer | Timeout in seconds | 30 |
+| `--max-messages` | `-m` | Integer | Maximum messages to read | 50 |
+| `--timeout` | `-T` | Integer | Timeout in seconds | 20 |
 | `--exclude-internal` | | Boolean | Exclude internal topics | True |
-| `--internal-prefix` | | String | Custom internal topic prefix | "_" |
+| `--internal-prefix` | | String | Custom internal topic prefix | "__" |
 | `--additional-exclude-prefixes` | | String | Additional prefixes to exclude | None |
 | `--include-patterns` | | String | Patterns to include | None |
 
@@ -83,7 +83,7 @@ schema-infer list-topics [OPTIONS]
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `--exclude-internal` | Boolean | Exclude internal topics | True |
-| `--internal-prefix` | String | Custom internal topic prefix | "_" |
+| `--internal-prefix` | String | Custom internal topic prefix | "__" |
 | `--additional-exclude-prefixes` | String | Additional prefixes to exclude | None |
 | `--include-patterns` | String | Patterns to include | None |
 | `--show-metadata` | Boolean | Show topic metadata | False |
@@ -149,7 +149,7 @@ schema-infer live [OPTIONS]
 | `--context` | String | Schema Registry context prefix | None |
 | `--consumer-group` | String | Consumer group ID for offset tracking | `schema-infer-live` |
 | `--batch-size` | Integer | Messages per batch before re-inferring | `100` (auto-scales) |
-| `--batch-timeout` | Float | Seconds to wait for a batch | `30.0` |
+| `--batch-timeout` | Float | Seconds to wait for a batch | `60.0` |
 | `--state-dir` | Path | State persistence directory | `~/.schema-infer/state/` |
 | `--no-persist-state` | Flag | Disable state persistence | off |
 | `--data-format` | Choice | Force data format: json, csv, key-value, auto | `auto` |
@@ -200,7 +200,7 @@ live: LiveConfig
 ```yaml
 kafka:
   bootstrap_servers: string                    # Required: Kafka bootstrap servers
-  auto_offset_reset: string                    # Default: "latest"
+  auto_offset_reset: string                    # Default: "earliest"
   session_timeout_ms: integer                  # Default: 30000
   heartbeat_interval_ms: integer               # Default: 10000
   security_protocol: string                    # Default: "PLAINTEXT"
@@ -210,8 +210,8 @@ kafka:
   ssl_ca_location: string                      # Optional
   ssl_certificate_location: string             # Optional
   ssl_key_location: string                     # Optional
-  cloud_api_key: string                        # Optional: Schema Inference Cloud API key
-  cloud_api_secret: string                     # Optional: Schema Inference Cloud API secret
+  cloud_api_key: string                        # Optional: Confluent Cloud API key
+  cloud_api_secret: string                     # Optional: Confluent Cloud API secret
 ```
 
 ### SchemaRegistryConfig
@@ -225,8 +225,8 @@ schema_registry:
   auth: object                                 # Optional: Authentication config
   compatibility: string                        # Default: "BACKWARD"
   subject_name_strategy: string                # Default: "TopicNameStrategy"
-  cloud_api_key: string                        # Optional: Schema Inference Cloud API key
-  cloud_api_secret: string                     # Optional: Schema Inference Cloud API secret
+  cloud_api_key: string                        # Optional: Confluent Cloud API key
+  cloud_api_secret: string                     # Optional: Confluent Cloud API secret
 ```
 
 ### InferenceConfig
@@ -234,8 +234,8 @@ schema_registry:
 ```yaml
 inference:
   max_messages: integer                        # Default: 50
-  timeout: integer                             # Default: 30
-  max_depth: integer                           # Default: 5
+  timeout: integer                             # Default: 20
+  max_depth: integer                           # Default: 20
   confidence_threshold: float                  # Default: 0.8
   auto_detect_format: boolean                  # Default: true
   forced_data_format: string                   # Optional: Force specific format
@@ -259,7 +259,7 @@ performance:
 
 ```yaml
 topic_filter:
-  internal_prefix: string                      # Default: "_"
+  internal_prefix: string                      # Default: "__"
   exclude_internal: boolean                    # Default: true
   additional_exclude_prefixes: array           # Default: []
   include_patterns: array                      # Default: []
@@ -271,7 +271,7 @@ topic_filter:
 live:
   consumer_group: string                       # Default: "schema-infer-live"
   batch_size: integer                          # Default: 100 (auto-scales with topic count)
-  batch_timeout_seconds: float                 # Default: 30.0
+  batch_timeout_seconds: float                 # Default: 60.0
   state_dir: string                            # Default: "~/.schema-infer/state"
   persist_state: boolean                       # Default: true
   initial_offset: string                       # Default: "latest" (earliest or latest)
@@ -296,7 +296,7 @@ Main class for schema inference operations.
 class SchemaInferrer:
     def __init__(
         self,
-        max_depth: int = 5,
+        max_depth: int = 20,
         confidence_threshold: float = 0.8,
         array_handling: str = "union",
         null_handling: str = "optional"
@@ -812,7 +812,7 @@ from schema_infer.config import Config
 config = Config()
 
 # Initialize inferrer
-inferrer = SchemaInferrer(max_depth=5)
+inferrer = SchemaInferrer(max_depth=20)
 
 # Sample data
 data = [

@@ -25,16 +25,16 @@
 
 ## Overview
 
-The **Schema Inference Plugin** is a powerful CLI tool that automatically infers and generates schemas from Kafka topic data. It supports multiple schema formats (JSON Schema, Avro, Protobuf) and can handle complex nested data structures with comprehensive data type detection.
+The **Schema Inference Plugin** is a CLI tool that automatically infers and generates schemas from Kafka topic data. It supports multiple schema formats (JSON Schema, Avro, Protobuf) and can handle complex nested data structures with comprehensive data type detection.
 
 ### Key Benefits
 
-- **🚀 Automatic Schema Discovery**: No manual schema writing required
-- **📊 Multi-Format Support**: Generate JSON Schema, Avro, and Protobuf schemas
-- **🔍 Deep Nested Analysis**: Handles complex nested objects and arrays
-- **⚡ High Performance**: Optimized for large topics and high-throughput scenarios
-- **☁️ Cloud & Platform Support**: Works with Schema Inference Cloud and Schema Inference Platform
-- **🛡️ Production Ready**: Robust error handling and comprehensive logging
+- **Automatic Schema Discovery**: No manual schema writing required
+- **Multi-Format Support**: Generate JSON Schema, Avro, and Protobuf schemas
+- **Deep Nested Analysis**: Handles complex nested objects and arrays
+- **High Performance**: Optimized for large topics and high-throughput scenarios
+- **Cloud & Platform Support**: Works with Confluent Cloud and Confluent Platform
+- **Production Ready**: Robust error handling and comprehensive logging
 
 ### Use Cases
 
@@ -50,39 +50,39 @@ The **Schema Inference Plugin** is a powerful CLI tool that automatically infers
 
 ### Core Features
 
-#### 🎯 **Multi-Format Schema Generation**
+#### Multi-Format Schema Generation
 - **JSON Schema**: Industry-standard JSON Schema (Draft 7)
 - **Avro**: Apache Avro with nested record structures
 - **Protobuf**: Protocol Buffers with nested message definitions
 
-#### 🔍 **Intelligent Data Analysis**
+#### Intelligent Data Analysis
 - **Automatic Format Detection**: JSON, CSV, key-value, raw text
 - **Deep Nested Analysis**: Up to 20 levels of nesting
 - **Comprehensive Type Detection**: string, number (unified int/float), boolean, null, arrays, objects
 - **Array Handling**: Arrays of primitives, objects, and mixed types
 
-#### ⚡ **High Performance**
+#### High Performance
 - **Parallel Processing**: Multi-threaded topic processing
 - **Optimized Message Reading**: Smart offset selection and batch processing
 - **Connection Reuse**: Efficient Kafka consumer management
 - **Progress Tracking**: Real-time progress bars and ETA
 
-#### 🎛️ **Flexible Topic Discovery**
+#### Flexible Topic Discovery
 - **Single Topic**: Process individual topics
 - **Multiple Topics**: Process comma-separated topic lists
 - **Prefix Matching**: Process all topics with specific prefixes
 - **Pattern Matching**: Regex-based topic selection
 - **Smart Filtering**: Exclude internal topics and system topics
 
-#### 🔐 **Enterprise Security**
-- **Schema Inference Cloud**: Full API key/secret authentication
-- **Schema Inference Platform**: SASL/SSL authentication support
+#### Enterprise Security
+- **Confluent Cloud**: Full API key/secret authentication
+- **Confluent Platform**: SASL/SSL authentication support
 - **Schema Registry**: Secure schema registration and management
 - **Configurable Security**: Flexible authentication mechanisms
 
 ### Advanced Features
 
-#### 📊 **Schema Registry Integration**
+#### Schema Registry Integration
 - **Automatic Registration**: Register schemas in Schema Registry
 - **Compatibility Levels**: Configurable compatibility settings
 - **Subject Strategies**: TopicName, RecordName, TopicRecordName strategies
@@ -90,13 +90,13 @@ The **Schema Inference Plugin** is a powerful CLI tool that automatically infers
 - **Deep Schema Merging**: Recursively merges nested objects and array items with existing SR schemas
 - **Flat-to-Multi-Event Transition**: Automatically handles structural schema changes with temporary compatibility override
 
-#### 🎨 **Customization Options**
+#### Customization Options
 - **Configurable Depth**: Adjustable nesting depth limits
 - **Format Preferences**: Force specific data format detection
 - **Output Options**: File output, directory output, or registry registration
 - **Verbose Logging**: Detailed debugging and monitoring
 
-#### 🛠️ **Developer Experience**
+#### Developer Experience
 - **Progress Indicators**: Visual progress bars and status updates
 - **Comprehensive Logging**: Detailed operation logs
 - **Error Handling**: Graceful error recovery and reporting
@@ -207,7 +207,7 @@ kafka:
   heartbeat_interval_ms: 10000
   security_protocol: "PLAINTEXT"
   
-  # Schema Inference Cloud Authentication
+  # Confluent Cloud Authentication
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 
@@ -219,7 +219,7 @@ schema_registry:
   subject_name_strategy: "TopicNameStrategy"
   context: null  # Optional: prefix subjects with :.context-name:
 
-  # Schema Inference Cloud Authentication
+  # Confluent Cloud Authentication
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 
@@ -273,23 +273,23 @@ For advanced use cases, you can still use environment variables for other settin
 
 ### Configuration Examples
 
-#### Schema Inference Cloud Configuration
+#### Confluent Cloud Configuration
 
 ```yaml
 kafka:
-  bootstrap_servers: "pkc-xxxxx.us-west-2.aws.schema-infer.cloud:9092"
+  bootstrap_servers: "pkc-xxxxx.us-west-2.aws.confluent.cloud:9092"
   security_protocol: "SASL_SSL"
   sasl_mechanism: "PLAIN"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 
 schema_registry:
-  url: "https://psrc-xxxxx.us-west-2.aws.schema-infer.cloud"
+  url: "https://psrc-xxxxx.us-west-2.aws.confluent.cloud"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 ```
 
-#### Schema Inference Platform Configuration
+#### Confluent Platform Configuration
 
 ```yaml
 kafka:
@@ -626,7 +626,7 @@ Apache Avro is a data serialization system with rich data structures.
 - Compact binary format
 - Schema evolution support
 - Strong typing
-- Schema Inference Platform integration
+- Confluent Platform integration
 
 **Example Output:**
 
@@ -2067,8 +2067,8 @@ python run_tests.py --coverage
 
 ## Conclusion
 
-The Schema Inference Plugin provides a powerful, flexible, and production-ready solution for automatic schema generation from Kafka topics. With support for multiple schema formats, comprehensive data type detection, and enterprise-grade security, it's the ideal tool for modern data architectures.
+The Schema Inference Plugin provides a production-ready solution for automatic schema generation from Kafka topics. It supports multiple schema formats (JSON Schema, Avro, Protobuf), comprehensive data type detection, and integration with Confluent Cloud and Confluent Platform.
 
-Whether you're migrating from untyped to typed systems, establishing data governance, or accelerating development workflows, this plugin provides the tools and flexibility you need to succeed.
+Common use cases include migrating from untyped to typed systems, establishing data governance, and accelerating development workflows.
 
-For more information, examples, and support, visit our [GitHub repository](https://github.com/akrishnanDG/schema-infer-plugin) or contact Schema Inference Support.
+For more information, examples, and support, visit the [GitHub repository](https://github.com/akrishnanDG/schema-infer-plugin).

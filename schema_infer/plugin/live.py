@@ -100,6 +100,7 @@ class LiveModeOrchestrator:
         self._topic_flat_registered: Set[str] = set()  # Topics with flat schemas already in SR
         self._topic_event_types: Dict[str, Set[str]] = {}  # Known event types per topic
         self._topic_last_activity: Dict[str, float] = {}
+        self._topic_partitions: Dict[str, Set[int]] = {}  # Partition IDs owned per topic
         # Lock for topic metadata dicts (fast dict ops only — never hold during I/O).
         # Lock ordering: always acquire _states_lock before _metadata_lock if both needed.
         self._metadata_lock = threading.Lock()
@@ -236,7 +237,7 @@ class LiveModeOrchestrator:
             self._persist_all_dirty_states()
             self._print_shutdown_summary()
 
-    def _on_topics_assigned(self, topics: Set[str]) -> None:
+    def _on_topics_assigned(self, topics: Set[str], partition_map: Dict[str, Set[int]]) -> None:
         """
         Called when Kafka assigns new topic partitions to this instance.
 
@@ -244,6 +245,10 @@ class LiveModeOrchestrator:
         This enables multi-instance scaling: when a topic moves from
         instance A to instance B, B picks up A's persisted state.
         """
+        # Track which partitions we own (used for partition-0 registration gating)
+        with self._metadata_lock:
+            self._topic_partitions.update(partition_map)
+
         if not self.state_store:
             return
 
@@ -262,7 +267,7 @@ class LiveModeOrchestrator:
                 f"newly assigned topics"
             )
 
-    def _on_topics_revoked(self, topics: Set[str]) -> None:
+    def _on_topics_revoked(self, topics: Set[str], partition_map: Dict[str, Set[int]]) -> None:
         """
         Called when Kafka revokes topic partitions from this instance.
 
@@ -297,12 +302,23 @@ class LiveModeOrchestrator:
                 self._topic_flat_registered.discard(topic_name)
                 self._topic_event_types.pop(topic_name, None)
                 self._topic_last_activity.pop(topic_name, None)
+                self._topic_partitions.pop(topic_name, None)
 
         if persisted > 0:
             click.echo(
                 f"[{_ts()}] Rebalance: persisted state for {persisted} "
                 f"revoked topics"
             )
+
+    def _owns_partition_zero(self, topic_name: str) -> bool:
+        """Check if this instance owns partition 0 of the topic.
+
+        Only the partition-0 owner registers schemas, preventing
+        cross-instance races on Schema Registry operations.
+        """
+        with self._metadata_lock:
+            partitions = self._topic_partitions.get(topic_name, set())
+            return 0 in partitions
 
     def _process_batch(
         self, topic_messages: Dict[str, List[Tuple[Optional[bytes], bytes]]]
@@ -426,9 +442,14 @@ class LiveModeOrchestrator:
                 and state.total_records_processed
                 >= self.config.live.min_records_before_register
             ):
-                self._handle_schema_registration(
-                    topic_name, state, new_schema, report, is_initial
-                )
+                if self._owns_partition_zero(topic_name):
+                    self._handle_schema_registration(
+                        topic_name, state, new_schema, report, is_initial
+                    )
+                else:
+                    self.logger.debug(
+                        f"{topic_name}: Skipping registration (partition 0 owned by another instance)"
+                    )
             elif self.register and self.registry:
                 click.echo(
                     f"[{_ts()}] {topic_name}: Waiting for "
@@ -500,9 +521,14 @@ class LiveModeOrchestrator:
         with self._metadata_lock:
             self._topic_event_types[topic_name] = known_types
 
-        # Register if changes detected or new event type appeared
+        # Register if changes detected or new event type appeared (partition-0 owner only)
         if (any_changes or new_event_type_discovered) and self.register and self.registry:
-            self._handle_multi_event_registration(topic_name, discriminator)
+            if self._owns_partition_zero(topic_name):
+                self._handle_multi_event_registration(topic_name, discriminator)
+            else:
+                self.logger.debug(
+                    f"{topic_name}: Skipping multi-event registration (partition 0 owned by another instance)"
+                )
 
     def _handle_multi_event_registration(
         self,
@@ -589,6 +615,21 @@ class LiveModeOrchestrator:
         previous_compat = None
         with self._metadata_lock:
             was_flat_registered = topic_name in self._topic_flat_registered
+
+        # Optimistic check: verify SR hasn't already been transitioned by another instance
+        if was_flat_registered:
+            try:
+                existing = self.registry.get_latest_schema(main_subject)
+                if existing and "schema" in existing:
+                    import json as _json
+                    existing_schema = _json.loads(existing["schema"])
+                    if "oneOf" in existing_schema:
+                        was_flat_registered = False
+                        with self._metadata_lock:
+                            self._topic_flat_registered.discard(topic_name)
+                        click.echo(f"[{_ts()}] {topic_name}: Already transitioned to oneOf by another instance")
+            except Exception:
+                pass
 
         if was_flat_registered:
             try:

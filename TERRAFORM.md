@@ -61,7 +61,7 @@ module "inferred_schemas" {
 
   topics       = ["orders", "payments", "users"]
   format       = "json-schema"
-  max_messages = 100
+  max_messages = 50
 }
 
 # Register inferred schemas via Confluent provider
@@ -103,7 +103,7 @@ module "inferred_schemas" {
 |----------|----------|---------|-------------|
 | `topics` | Yes | - | List of Confluent Cloud Kafka topic names to infer schemas from |
 | `format` | No | `avro` | Output format: `avro`, `protobuf`, or `json-schema`. Use `json-schema` for unserialized JSON messages |
-| `max_messages` | No | `100` | Maximum messages to sample per topic |
+| `max_messages` | No | `50` | Maximum messages to sample per topic |
 | `config_file` | No | `""` | Path to Confluent Cloud YAML config file (Option B) |
 | `bootstrap_servers` | No | `""` | Confluent Cloud bootstrap servers (Option A) |
 | `kafka_api_key` | No | `""` | Confluent Cloud Kafka API key (Option A, sensitive) |
@@ -155,7 +155,7 @@ module "inferred_schemas" {
 
   topics       = local.topics
   format       = "json-schema"
-  max_messages = 100
+  max_messages = 50
 }
 
 resource "confluent_schema" "inferred" {

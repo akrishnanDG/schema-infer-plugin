@@ -239,6 +239,8 @@ message iot_sensor_data {
 
 ## Live Consumer Examples
 
+> **Note:** By default, live mode starts consuming from the latest offset. To process all existing messages from the beginning of a topic, add the `--from-beginning` flag to the command.
+
 ### Example: Schema Evolution Detection
 
 **Scenario**: Your `orders` topic started with basic fields but developers keep adding new fields as the product evolves. You want the Schema Registry to stay up-to-date automatically.
@@ -255,7 +257,7 @@ schema_registry:
 live:
   initial_offset: "latest"
   batch_size: 100
-  batch_timeout_seconds: 30
+  batch_timeout_seconds: 60.0
   min_records_before_register: 10
 ```
 
@@ -270,7 +272,7 @@ schema-infer --config live-config.yaml live \
 
 **Output** (as data evolves over time):
 ```
-Live mode started (batch: 100 msgs / 30.0s, format: avro)
+Live mode started (batch: 100 msgs / 60.0s, format: avro)
   Consumer group: schema-infer-live
   Topics: orders
   Registering schemas to Schema Registry
@@ -558,22 +560,22 @@ schema-infer --config governance-config.yaml validate-topics --check-connectivit
 
 ## Cloud Examples
 
-### Example 7: Schema Inference Cloud Setup
+### Example 7: Confluent Cloud Setup
 
-**Scenario**: Generate schemas using Schema Inference Cloud.
+**Scenario**: Generate schemas using Confluent Cloud.
 
 **Configuration**:
 ```yaml
 # cloud-config.yaml
 kafka:
-  bootstrap_servers: "pkc-xxxxx.us-west-2.aws.schema-infer.cloud:9092"
+  bootstrap_servers: "pkc-xxxxx.us-west-2.aws.confluent.cloud:9092"
   security_protocol: "SASL_SSL"
   sasl_mechanism: "PLAIN"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
 
 schema_registry:
-  url: "https://psrc-xxxxx.us-west-2.aws.schema-infer.cloud"
+  url: "https://psrc-xxxxx.us-west-2.aws.confluent.cloud"
   cloud_api_key: "your-api-key"
   cloud_api_secret: "your-api-secret"
   compatibility: "BACKWARD"
@@ -586,7 +588,7 @@ performance:
 
 **Commands**:
 ```bash
-# List topics in Schema Inference Cloud
+# List topics in Confluent Cloud
 schema-infer --config cloud-config.yaml list-topics
 
 # Generate schemas for cloud topics
@@ -1158,4 +1160,4 @@ schema-infer --config registry-debug-config.yaml infer --topic "test-topic" --fo
 
 ---
 
-These examples demonstrate the versatility and power of the Schema Inference Plugin across various use cases, from simple single-topic scenarios to complex enterprise deployments. Each example includes configuration files, commands, and expected outputs to help you get started quickly.
+These examples cover a range of use cases from single-topic inference to enterprise deployments. Each includes configuration files, commands, and expected output.
