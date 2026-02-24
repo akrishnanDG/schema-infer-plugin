@@ -4,6 +4,7 @@ Version: 1.2.0
 Build: 2025-10-12-10:55:00
 """
 
+import logging
 import sys
 import os
 import time
@@ -23,6 +24,8 @@ from ..plugin.auth import AuthenticationManager
 from ..plugin.optimistic import OptimisticProcessor, SuppressTelemetry
 from ..utils.logger import setup_logging
 
+logger = logging.getLogger(__name__)
+
 # Plugin version information
 PLUGIN_VERSION = "1.3.0"
 PLUGIN_BUILD = "2026-02-13"
@@ -39,7 +42,8 @@ def _extract_event_types(main_schema_json: str, topic_name: str) -> set:
             if ref_name.startswith(f"{topic_name}-"):
                 types.add(ref_name[len(f"{topic_name}-"):])
         return types
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to extract event types from schema for topic '%s': %s", topic_name, e)
         return set()
 
 
@@ -474,8 +478,8 @@ def infer(
                                             schema_content = merger.merge_flat_schemas(
                                                 existing["schema"], schema_content
                                             )
-                                    except Exception:
-                                        pass
+                                    except Exception as e:
+                                        logger.debug("Skipping schema merge for '%s': %s", topic_name, e)
                                 is_valid, validation_error = validate_generated_schema(schema_content, format)
                                 if not is_valid:
                                     return (topic_name, False, f"Generated schema is invalid: {validation_error}")
@@ -547,8 +551,8 @@ def infer(
                                             for et in sorted(set(sub_contents.keys()) | set(existing_sub.keys()))
                                             if f"{topic_name}.{et}" in merged
                                         }
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    logger.debug("Skipping multi-event schema merge for '%s': %s", topic_name, e)
 
                                 reg_result = registry.register_multi_event_schemas(
                                     topic_name, sub_contents, main_content, format
@@ -691,8 +695,8 @@ def infer(
                                             for et in sorted(set(sub_contents.keys()) | set(existing_sub.keys()))
                                             if f"{topic_name}.{et}" in merged
                                         }
-                                except Exception:
-                                    pass  # No existing schema, use new as-is
+                                except Exception as e:
+                                    logger.debug("Skipping multi-event schema merge for '%s': %s", topic_name, e)
 
                                 reg_result = registry.register_multi_event_schemas(
                                     topic_name, sub_contents, main_content, format
@@ -746,8 +750,8 @@ def infer(
                                         schema_content = merger.merge_flat_schemas(
                                             existing["schema"], schema_content
                                         )
-                                except Exception:
-                                    pass  # No existing schema or merge failed, use new as-is
+                                except Exception as e:
+                                    logger.debug("Skipping schema merge for '%s': %s", topic_name, e)
 
                             from ..utils.validators import validate_generated_schema
                             is_valid, validation_error = validate_generated_schema(schema_content, format)

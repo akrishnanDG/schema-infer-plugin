@@ -136,11 +136,13 @@ class SchemaRegistry:
             elif hasattr(e, 'response') and e.response is not None:
                 try:
                     error_details = e.response.json()
-                    self.logger.error(f"Schema Registry error details: {error_details}")
-                    raise SchemaRegistryError(f"Schema Registry error: {error_details}")
-                except Exception:
-                    self.logger.error(f"Failed to register schema: {e}")
-                    raise SchemaRegistryError(f"Failed to register schema: {e}")
+                    error_code = error_details.get("error_code", e.response.status_code)
+                    error_message = error_details.get("message", "Unknown error")
+                    self.logger.error(f"Schema Registry error {error_code}: {error_message}")
+                    raise SchemaRegistryError(f"Schema Registry error {error_code}: {error_message}")
+                except (ValueError, KeyError):
+                    self.logger.error(f"Failed to register schema: HTTP {e.response.status_code}")
+                    raise SchemaRegistryError(f"Failed to register schema: HTTP {e.response.status_code}")
             else:
                 self.logger.error(f"Failed to register schema: {e}")
                 raise SchemaRegistryError(f"Failed to register schema: {e}")

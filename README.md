@@ -10,13 +10,13 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 ## Features
 
 - **Multi-Format Schema Generation**: JSON Schema, Avro, and Protobuf
-- **Intelligent Data Analysis**: Automatic format detection, datetime/enum inference, and deep nested analysis
+- **Intelligent Data Analysis**: Automatic format detection, datetime/enum inference, deep nested analysis (max depth 20), and unified numeric types (all numbers inferred as `number`)
 - **High Performance**: Parallel processing and optimized message reading
 - **Flexible Topic Discovery**: Single topics, multiple topics, prefix/pattern matching
 - **Enterprise Security**: Full Confluent Cloud and Platform authentication support
 - **Schema Registry Integration**: Automatic registration with compatibility management
-- **Multi-Event Detection**: Auto-detect topics with multiple event types and generate per-type schemas with `oneOf` references
-- **Production Ready**: Schema validation, retry logic, and comprehensive error handling
+- **Multi-Event Detection**: Auto-detect topics with multiple event types, generate per-type schemas with `oneOf` references using accurate SR version numbers, and periodic discriminator re-evaluation
+- **Production Ready**: Schema validation, retry logic, deep recursive schema merging (objects + array items), flat-to-multi-event transition handling, and comprehensive error handling
 - **Continuous Monitoring**: Watch mode for automatic schema inference on new topics
 - **Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas
 - **Horizontal Scaling**: Multi-instance support with shared consumer groups for 1000+ topics
@@ -103,11 +103,12 @@ performance:
 - **Raw Text**: Fallback for unrecognized formats
 
 ### Intelligent Type Detection
+- **Numbers**: All numeric types (int, float) unified as `number` in JSON Schema (`double` in Avro/Protobuf) to prevent compatibility errors when a field appears as integer in one batch and float in another
 - **Datetime**: ISO 8601 timestamps detected and annotated with `format: "date-time"`
 - **Date**: Date strings detected and annotated with `format: "date"`
 - **Enum**: Low-cardinality string fields automatically identified as enums
 - **Arrays**: Proper array types with item schemas (e.g., `array<string>`, `array<object>`)
-- **Nested Objects**: Deep nesting preserved in all output formats
+- **Nested Objects**: Deep nesting preserved in all output formats (max depth: 20 levels)
 
 ### Output Schema Formats
 - **JSON Schema**: Industry-standard JSON Schema (Draft 7)
@@ -148,11 +149,12 @@ schema_registry:
 When a topic contains multiple event types (e.g., `user_created`, `payment_processed`, `order_placed`), the tool automatically detects this and generates separate schemas per event type with a main `oneOf` schema using Schema Registry references.
 
 **How it works:**
-1. Auto-detects a discriminator field (`event_type`, `type`, `action`, etc.)
+1. Auto-detects a discriminator field (`event_type`, `type`, `action`, etc.) -- re-evaluates every 500 records until found
 2. Validates that different discriminator values produce different field sets (same schema with different values is not split)
 3. Generates individual sub-schemas for each event type
 4. Creates a main topic schema using `oneOf` with `$ref` to sub-schemas
-5. Registers sub-schemas as separate subjects, then the main schema with references
+5. Registers sub-schemas as separate subjects, then the main schema with references using actual SR version numbers
+6. If a flat schema was previously registered, handles the transition by temporarily setting compatibility to NONE, then restoring it
 
 ```bash
 # Auto-detect and split (default behavior)
@@ -502,6 +504,16 @@ schema_registry:
 ```
 
 Generated JSON Schemas use a closed content model (`additionalProperties: false`), which allows adding optional fields under BACKWARD compatibility per Confluent's schema evolution rules. This means schemas can safely evolve across multiple inference runs without compatibility errors.
+
+### Schema Merging Behavior
+
+When merging with existing schemas in Schema Registry:
+- **New fields** are added to the existing schema
+- **Existing fields** are preserved (never removed or narrowed)
+- **Type conflicts**: existing type is kept to avoid compatibility errors
+- **Nested objects**: recursively deep-merged at each level
+- **Array items**: recursively merged -- `items.properties` are deep-merged to prevent `COMBINED_TYPE_SUBSCHEMAS_CHANGED` errors
+- The existing schema is always used as the base, ensuring no existing types or structures are overwritten
 
 ### Live Consumer Configuration
 ```yaml

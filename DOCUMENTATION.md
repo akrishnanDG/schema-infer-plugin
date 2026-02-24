@@ -57,8 +57,8 @@ The **Schema Inference Plugin** is a powerful CLI tool that automatically infers
 
 #### 🔍 **Intelligent Data Analysis**
 - **Automatic Format Detection**: JSON, CSV, key-value, raw text
-- **Deep Nested Analysis**: Up to 5 levels of nesting
-- **Comprehensive Type Detection**: string, int, float, boolean, null, arrays, objects
+- **Deep Nested Analysis**: Up to 20 levels of nesting
+- **Comprehensive Type Detection**: string, number (unified int/float), boolean, null, arrays, objects
 - **Array Handling**: Arrays of primitives, objects, and mixed types
 
 #### ⚡ **High Performance**
@@ -86,7 +86,9 @@ The **Schema Inference Plugin** is a powerful CLI tool that automatically infers
 - **Automatic Registration**: Register schemas in Schema Registry
 - **Compatibility Levels**: Configurable compatibility settings
 - **Subject Strategies**: TopicName, RecordName, TopicRecordName strategies
-- **Version Management**: Automatic versioning and evolution
+- **Version Management**: Automatic versioning and evolution with accurate version references
+- **Deep Schema Merging**: Recursively merges nested objects and array items with existing SR schemas
+- **Flat-to-Multi-Event Transition**: Automatically handles structural schema changes with temporary compatibility override
 
 #### 🎨 **Customization Options**
 - **Configurable Depth**: Adjustable nesting depth limits
@@ -225,7 +227,7 @@ schema_registry:
 inference:
   max_messages: 50
   timeout: 30
-  max_depth: 5
+  max_depth: 20
   confidence_threshold: 0.8
   auto_detect_format: true
   forced_data_format: null
@@ -732,9 +734,9 @@ message user_events {
 
 The plugin automatically detects and handles:
 
-- **Primitive Types**: string, int, float, boolean, null
+- **Primitive Types**: string, number (all integers and floats unified), boolean, null
 - **Complex Types**: objects, arrays, unions
-- **Nested Structures**: Up to 5 levels deep
+- **Nested Structures**: Up to 20 levels deep
 - **Array Types**: Arrays of primitives, objects, mixed types
 - **Nullable Fields**: Optional vs required field detection
 
@@ -840,6 +842,18 @@ Key compatibility behavior for JSON Schema on Confluent Cloud:
 
 The tool generates closed content model schemas by default, so schema evolution (adding fields discovered in subsequent inference runs) works correctly with BACKWARD compatibility.
 
+#### Schema Merging
+
+When registering schemas that already exist in Schema Registry, the tool deep-merges rather than replacing:
+
+- **New fields** are added to the existing schema
+- **Existing fields** are preserved (never removed or type-narrowed)
+- **Type conflicts**: existing type is kept to avoid `COMBINED_TYPE_SUBSCHEMAS_CHANGED` errors
+- **Nested objects**: recursively merged at each level of nesting
+- **Array items**: recursively merged — `items.properties` are deep-merged so nested fields inside arrays are preserved
+- **Unified numeric types**: all integers and floats are inferred as `number` to prevent compatibility errors when a field appears as `5` in one batch and `5.5` in another
+- The existing schema is always used as the base, ensuring no existing types or structures are overwritten
+
 #### Subject Name Strategies
 ```yaml
 schema_registry:
@@ -855,7 +869,10 @@ Topics that contain multiple event types (e.g., user events and payment events i
 1. The tool scans for candidate discriminator fields (top-level string fields with low cardinality)
 2. Fields with well-known names (`event_type`, `type`, `action`, `kind`, etc.) are prioritized
 3. A candidate is only accepted if grouping records by its values produces groups with **different field sets** — if all groups have identical fields, the candidate is rejected (it's just a value variation, not different event types)
-4. If a valid discriminator is found, per-type schemas are generated; otherwise, a flat schema is produced
+4. Detection is **periodic** — re-evaluates every 500 records while no discriminator is found, so topics with uniform early data can still be classified as multi-event later
+5. If a valid discriminator is found, per-type schemas are generated; otherwise, a flat schema is produced
+6. Schema references use the **actual version number** from Schema Registry, not a hardcoded value
+7. If a flat schema was previously registered and a discriminator is later detected, the tool handles the transition by temporarily setting subject compatibility to NONE, registering the `oneOf` schema, then restoring the original compatibility
 
 #### Auto-Detection (Default)
 
@@ -1356,6 +1373,197 @@ schema_registry:
   cloud_api_secret: "correct-api-secret"
 ```
 
+#### Schema Registry Error Codes
+
+When schema registration or retrieval fails, the Schema Registry returns specific error codes. These codes appear in the CLI output as `Schema Registry error <code>: <message>`.
+
+| Error Code | HTTP Status | Meaning | Common Cause |
+|------------|-------------|---------|--------------|
+| `40401` | 404 | Subject not found | The subject does not exist in the registry. This is normal on first registration and handled automatically. |
+| `40402` | 404 | Schema version not found | Requested a specific version that does not exist for the subject. |
+| `40403` | 404 | Schema not found | Requested a schema by ID that does not exist in the registry. |
+| `42201` | 422 | Invalid schema | The generated schema is syntactically invalid. Check your data for malformed or mixed-format messages. |
+| `42202` | 422 | Invalid version | An invalid version number was specified in the request. |
+| `409` | 409 | Incompatible schema | The new schema is not compatible with the previous version under the subject's compatibility level. See below. |
+| `401` | 401 | Authentication failed | API key or secret is incorrect, expired, or missing. |
+| `403` | 403 | Authorization failed | The API key does not have permission for this operation. Check your ACLs or RBAC role assignments in Confluent Cloud. |
+
+**Compatibility violations (error 409)**
+
+This is the most common registration failure. It means the new schema breaks the subject's compatibility rules. Common causes:
+
+- **Field removed** under `BACKWARD` compatibility — consumers using the new schema can't read old messages missing the field
+- **Field type changed** (e.g., `string` to `integer`) — not compatible under any mode except `NONE`
+- **`additionalProperties` changed** from `true` to `false` — rejects messages with extra fields
+- **Structural change** (e.g., flat `object` to `oneOf`) — the schema shape changed fundamentally
+
+To resolve compatibility errors:
+```bash
+# Check the current compatibility level for a subject
+curl -u <api-key>:<api-secret> \
+  https://<sr-url>/config/<subject-name>
+```
+
+> **Note**: When the tool detects a transition from a single-event (flat) schema to a multi-event (oneOf) schema, it automatically handles the compatibility override — temporarily setting the subject to `NONE` for the registration, then restoring the original level. No manual intervention is needed for this case.
+
+#### Required Permissions
+
+The tool requires specific permissions for both Kafka cluster access and Schema Registry access. Below are the minimum permissions needed for each operation.
+
+**Kafka Cluster (Data)**
+
+| Operation | Resource Type | Resource | Permission | Used By |
+|-----------|--------------|----------|------------|---------|
+| `DESCRIBE` | Cluster | `kafka-cluster` | Cluster-level metadata access | All commands |
+| `DESCRIBE` | Topic | `*` or specific topics | List and discover topics | `list-topics`, `watch`, `infer` with `--topic-prefix`/`--topic-pattern` |
+| `READ` | Topic | Target topic(s) | Consume messages from topics | `infer`, `live` |
+| `READ` | Consumer Group | `schema-infer-*` | Consumer group membership | `infer`, `live` |
+
+**Schema Registry**
+
+| Operation | API Endpoint | Permission | Used By |
+|-----------|-------------|------------|---------|
+| Read schemas | `GET /subjects`, `GET /subjects/{subject}/versions` | Read | Schema merging (reads existing schemas before registering) |
+| Register schemas | `POST /subjects/{subject}/versions` | Write | `infer --register`, `live` |
+| Read config | `GET /config/{subject}` | Read | Flat-to-multi-event transition (reads current compatibility level) |
+| Write config | `PUT /config/{subject}` | Owner-level | Flat-to-multi-event transition (temporarily overrides compatibility) |
+
+> **Note**: If you only need to infer schemas without registering (no `--register` flag), read access to the Kafka cluster is sufficient and no Schema Registry permissions are needed. Owner-level access on Schema Registry is only required when the tool transitions a subject from flat to multi-event schema, which requires temporarily changing the subject's compatibility level.
+
+##### ACL-Based Access (Confluent Cloud & Platform)
+
+Create a service account with an API key scoped to the Kafka cluster, then assign the following ACLs:
+
+```bash
+# Kafka cluster — minimum ACLs for schema inference (read-only)
+confluent kafka acl create --allow --service-account <sa-id> \
+  --operations DESCRIBE --cluster-scope
+
+confluent kafka acl create --allow --service-account <sa-id> \
+  --operations DESCRIBE,READ --topic '*' --prefix
+
+confluent kafka acl create --allow --service-account <sa-id> \
+  --operations READ --consumer-group 'schema-infer-' --prefix
+```
+
+##### RBAC Roles
+
+RBAC provides a more granular and manageable alternative to ACLs. The table below maps each use case to the minimum RBAC role required.
+
+**Kafka Cluster Roles**
+
+| Use Case | Minimum Role | Scope | Description |
+|----------|-------------|-------|-------------|
+| Infer only (no registration) | `DeveloperRead` | Topic-level or cluster-level | Read messages and list topics |
+| Infer + register | `DeveloperRead` | Topic-level or cluster-level | Same as above; registration is a Schema Registry operation |
+| Live mode | `DeveloperRead` | Topic-level or cluster-level | Continuous consumption requires the same read permissions |
+| Topic discovery (`list-topics`, `watch`) | `DeveloperRead` | Cluster-level | Needs `DESCRIBE` on all topics to discover them |
+
+**Schema Registry Roles**
+
+| Use Case | Minimum Role | Scope | Description |
+|----------|-------------|-------|-------------|
+| Read existing schemas (for merging) | `DeveloperRead` | Subject-level or global | Reads latest schema versions before merging |
+| Register schemas | `DeveloperWrite` | Subject-level or global | Registers new schema versions |
+| Flat-to-multi-event transition | `ResourceOwner` | Subject-level | Temporarily overrides subject compatibility from `BACKWARD` to `NONE` during schema structure transition, then restores it |
+
+**Confluent Cloud — RBAC setup commands**
+
+```bash
+# 1. Create a service account
+confluent iam service-account create schema-infer-sa \
+  --description "Service account for schema inference tool"
+
+# 2. Kafka cluster — DeveloperRead on all topics (or scope to specific topics)
+confluent iam rbac role-binding create \
+  --principal User:<sa-id> \
+  --role DeveloperRead \
+  --resource Topic:* \
+  --kafka-cluster <kafka-cluster-id> \
+  --environment <env-id>
+
+# 3. Kafka cluster — DeveloperRead on consumer group prefix
+confluent iam rbac role-binding create \
+  --principal User:<sa-id> \
+  --role DeveloperRead \
+  --resource Group:schema-infer- \
+  --prefix \
+  --kafka-cluster <kafka-cluster-id> \
+  --environment <env-id>
+
+# 4. Schema Registry — DeveloperWrite for registration
+confluent iam rbac role-binding create \
+  --principal User:<sa-id> \
+  --role DeveloperWrite \
+  --resource Subject:* \
+  --schema-registry-cluster <sr-cluster-id> \
+  --environment <env-id>
+
+# 5. Schema Registry — ResourceOwner (only if flat-to-multi-event transitions are expected)
+confluent iam rbac role-binding create \
+  --principal User:<sa-id> \
+  --role ResourceOwner \
+  --resource Subject:* \
+  --schema-registry-cluster <sr-cluster-id> \
+  --environment <env-id>
+```
+
+**Confluent Platform — RBAC setup**
+
+```bash
+# Kafka cluster — DeveloperRead
+confluent iam rbac role-binding create \
+  --principal User:<username> \
+  --role DeveloperRead \
+  --resource Topic:* \
+  --kafka-cluster-id <kafka-cluster-id>
+
+# Schema Registry — DeveloperWrite
+confluent iam rbac role-binding create \
+  --principal User:<username> \
+  --role DeveloperWrite \
+  --resource Subject:* \
+  --schema-registry-cluster-id <sr-cluster-id>
+
+# Schema Registry — ResourceOwner (only for flat-to-multi-event transitions)
+confluent iam rbac role-binding create \
+  --principal User:<username> \
+  --role ResourceOwner \
+  --resource Subject:* \
+  --schema-registry-cluster-id <sr-cluster-id>
+```
+
+**Scoping permissions to specific topics**
+
+For least-privilege access, scope Kafka and Schema Registry roles to specific topics or subjects instead of using wildcards:
+
+```bash
+# Kafka — read access to a specific topic
+confluent iam rbac role-binding create \
+  --principal User:<sa-id> \
+  --role DeveloperRead \
+  --resource Topic:my-topic \
+  --kafka-cluster <kafka-cluster-id> \
+  --environment <env-id>
+
+# Kafka — read access to topics with a shared prefix
+confluent iam rbac role-binding create \
+  --principal User:<sa-id> \
+  --role DeveloperRead \
+  --resource Topic:prod- \
+  --prefix \
+  --kafka-cluster <kafka-cluster-id> \
+  --environment <env-id>
+
+# Schema Registry — write access to matching subjects only
+confluent iam rbac role-binding create \
+  --principal User:<sa-id> \
+  --role DeveloperWrite \
+  --resource Subject:my-topic-value \
+  --schema-registry-cluster <sr-cluster-id> \
+  --environment <env-id>
+```
+
 #### Performance Issues
 
 **Problem**: Slow processing or timeouts
@@ -1463,7 +1671,7 @@ class SchemaRegistryConfig(BaseModel):
 class InferenceConfig(BaseModel):
     max_messages: int = 50
     timeout: int = 30
-    max_depth: int = 5
+    max_depth: int = 20
     confidence_threshold: float = 0.8
     auto_detect_format: bool = True
     forced_data_format: Optional[str] = None
@@ -1474,7 +1682,7 @@ class InferenceConfig(BaseModel):
 #### SchemaInferrer
 ```python
 class SchemaInferrer:
-    def __init__(self, max_depth: int = 5, confidence_threshold: float = 0.8):
+    def __init__(self, max_depth: int = 20, confidence_threshold: float = 0.8):
         pass
     
     def infer_schema(self, data: List[Dict], name: str) -> InferredSchema:
@@ -1710,7 +1918,7 @@ inference:
 - CSV parsing has limitations with complex structures
 
 #### 2. **Schema Complexity**
-- Maximum nesting depth of 5 levels
+- Maximum nesting depth of 20 levels (configurable via `max_depth`)
 - Limited support for recursive structures
 - No support for circular references
 
@@ -1737,8 +1945,7 @@ inference:
 - Mixed type arrays may not be optimal
 
 #### 3. **Schema Registry**
-- Limited compatibility level support
-- No support for schema references
+- Schema references supported for JSON Schema multi-event topics only
 - Limited subject name strategy options
 
 ### Workarounds
