@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+            binary_name: schema-infer
+          - os: macos-13
+            target: macos-x86_64
+            binary_name: schema-infer
+          - os: macos-latest
+            target: macos-arm64
+            binary_name: schema-infer
+          - os: windows-latest
+            target: windows-x86_64
+            binary_name: schema-infer.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build binary with PyInstaller
+        run: |
+          pyinstaller \
+            --onefile \
+            --name schema-infer \
+            --hidden-import schema_infer \
+            --hidden-import schema_infer.plugin.cli \
+            --hidden-import schema_infer.plugin.live \
+            --hidden-import schema_infer.plugin.auth \
+            --hidden-import schema_infer.plugin.optimistic \
+            --hidden-import schema_infer.core.consumer \
+            --hidden-import schema_infer.core.registry \
+            --hidden-import schema_infer.core.discovery \
+            --hidden-import schema_infer.core.inferrer \
+            --hidden-import schema_infer.core.live_consumer \
+            --hidden-import schema_infer.core.incremental \
+            --hidden-import schema_infer.core.merger \
+            --hidden-import schema_infer.core.state_store \
+            --hidden-import schema_infer.formats.detector \
+            --hidden-import schema_infer.formats.parsers \
+            --hidden-import schema_infer.schemas.generators \
+            --hidden-import schema_infer.schemas.inference \
+            --hidden-import schema_infer.utils.exceptions \
+            --hidden-import schema_infer.utils.validators \
+            --hidden-import schema_infer.utils.logger \
+            --hidden-import schema_infer.utils.performance \
+            --hidden-import schema_infer.config \
+            --collect-all confluent_kafka \
+            --collect-all pydantic \
+            schema_infer/__main__.py
+        shell: bash
+
+      - name: Rename binary
+        run: |
+          mv dist/${{ matrix.binary_name }} dist/schema-infer-${{ matrix.target }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+        shell: bash
+
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/schema-infer-${{ matrix.target }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+
+  publish-pypi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          twine upload dist/* || echo "PyPI upload skipped (no PYPI_API_TOKEN secret configured)"
