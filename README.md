@@ -18,8 +18,8 @@ A powerful CLI plugin that automatically infers and generates schemas from Kafka
 - **Multi-Event Detection**: Auto-detect topics with multiple event types, generate per-type schemas with `oneOf` references using accurate SR version numbers, and periodic discriminator re-evaluation
 - **Production Ready**: Schema validation, retry logic, deep recursive schema merging (objects + array items), flat-to-multi-event transition handling, and comprehensive error handling
 - **Continuous Monitoring**: Watch mode for automatic schema inference on new topics
-- **Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas
-- **Horizontal Scaling**: Multi-instance support with shared consumer groups for 1000+ topics
+- **Live Consumer Mode**: Continuously consume topics, detect schema evolution, and re-register updated schemas with `--from-beginning` bootstrap support
+- **Horizontal Scaling**: Thread-safe multi-instance support with shared consumer groups for 1000+ topics
 
 ## Documentation
 
@@ -202,6 +202,9 @@ Watch mode continuously polls the cluster, detects new topics, infers schemas, a
 # Continuously monitor a topic and register evolving schemas
 schema-infer --config config.yaml live --topic orders --register
 
+# Bootstrap from existing topic data (reads from beginning)
+schema-infer --config config.yaml live --topic orders --register --from-beginning
+
 # Monitor multiple topics with custom batch settings
 schema-infer --config config.yaml live \
   --topics "orders,payments,users" \
@@ -219,7 +222,7 @@ schema-infer --config config.yaml live \
   --topic orders --register --on-incompatible force
 ```
 
-Unlike `watch` (which only detects new topics), `live` mode continuously reads new messages from existing topics, incrementally builds schemas, detects schema evolution (new fields, type changes), and re-registers updated schemas. Consumer offsets are tracked via Kafka consumer groups for resume-on-restart.
+Unlike `watch` (which only detects new topics), `live` mode continuously reads new messages from existing topics, incrementally builds schemas, detects schema evolution (new fields, type changes), and re-registers updated schemas. By default, live mode only processes new messages (`latest`). Use `--from-beginning` to bootstrap schemas from existing topic data. Consumer offsets are tracked via Kafka consumer groups for resume-on-restart.
 
 ### Performance Optimization
 ```bash
@@ -520,8 +523,8 @@ When merging with existing schemas in Schema Registry:
 live:
   consumer_group: "schema-infer-live"   # Stable consumer group for offset tracking
   batch_size: 100                        # Messages per batch before re-inferring
-  batch_timeout_seconds: 30.0            # Max wait for a batch
-  initial_offset: "latest"              # Start from latest or earliest
+  batch_timeout_seconds: 60.0            # Max wait for a batch
+  initial_offset: "latest"              # Start from latest or earliest (or use --from-beginning)
   persist_state: true                    # Resume from where you left off
   state_dir: "~/.schema-infer/state"    # State persistence directory
   min_records_before_register: 10       # Min records before first registration

@@ -1390,7 +1390,7 @@ def watch(
     "--batch-timeout",
     type=float,
     default=None,
-    help="Seconds to wait for batch (default: 30.0)",
+    help="Seconds to wait for batch (default: 60.0)",
 )
 @click.option(
     "--state-dir",
@@ -1421,6 +1421,12 @@ def watch(
     default=None,
     help="Behavior when schema is incompatible (default: skip)",
 )
+@click.option(
+    "--from-beginning",
+    is_flag=True,
+    help="Start consuming from the earliest offset (useful for initial bootstrap). "
+         "Only applies when no committed offsets exist for the consumer group.",
+)
 @click.pass_context
 def live(
     ctx: click.Context,
@@ -1440,6 +1446,7 @@ def live(
     exclude_internal: bool,
     data_format: str,
     on_incompatible: Optional[str],
+    from_beginning: bool,
 ) -> None:
     """
     Continuously consume Kafka topics and update schemas as data evolves.
@@ -1483,6 +1490,10 @@ def live(
     # Override persist_state if --no-persist-state is set
     if no_persist_state:
         config.live.persist_state = False
+
+    # Override initial_offset if --from-beginning is set
+    if from_beginning:
+        config.live.initial_offset = "earliest"
 
     # Apply CLI overrides to live config
     effective_consumer_group = consumer_group or config.live.consumer_group

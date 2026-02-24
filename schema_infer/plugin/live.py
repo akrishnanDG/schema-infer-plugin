@@ -31,6 +31,8 @@ from ..schemas.generators import SchemaGeneratorFactory
 from ..utils.exceptions import LiveModeError, SchemaRegistryError
 from ..utils.logger import get_logger
 
+_SENTINEL = object()  # Distinguishes "not yet checked" from "checked, found None"
+
 
 class LiveModeOrchestrator:
     """
@@ -94,10 +96,13 @@ class LiveModeOrchestrator:
         self._states_lock = threading.Lock()
         self._topic_formats: Dict[str, str] = {}  # Cached detected format per topic
         self._topic_discriminators: Dict[str, Optional[str]] = {}  # Cached discriminator per topic
-        self._disc_record_counts: Dict[str, int] = {}  # Records since last discriminator check
+        self._disc_record_buffer: Dict[str, List[Dict[str, Any]]] = {}  # Buffered records for disc detection
         self._topic_flat_registered: Set[str] = set()  # Topics with flat schemas already in SR
         self._topic_event_types: Dict[str, Set[str]] = {}  # Known event types per topic
         self._topic_last_activity: Dict[str, float] = {}
+        # Lock for topic metadata dicts (fast dict ops only — never hold during I/O).
+        # Lock ordering: always acquire _states_lock before _metadata_lock if both needed.
+        self._metadata_lock = threading.Lock()
         self._shutdown = False
 
         # Statistics (use lock for thread-safe updates)
@@ -282,7 +287,16 @@ class LiveModeOrchestrator:
                         )
                 # Remove from memory -- new owner will load from disk
                 self._states.pop(topic_name, None)
+
+        # Clean all metadata dicts for revoked topics
+        with self._metadata_lock:
+            for topic_name in topics:
                 self._topic_formats.pop(topic_name, None)
+                self._topic_discriminators.pop(topic_name, None)
+                self._disc_record_buffer.pop(topic_name, None)
+                self._topic_flat_registered.discard(topic_name)
+                self._topic_event_types.pop(topic_name, None)
+                self._topic_last_activity.pop(topic_name, None)
 
         if persisted > 0:
             click.echo(
@@ -332,37 +346,46 @@ class LiveModeOrchestrator:
         """
         with self._stats_lock:
             self._total_messages += len(messages)
-        self._topic_last_activity[topic_name] = time.time()
+        with self._metadata_lock:
+            self._topic_last_activity[topic_name] = time.time()
 
         # Parse messages
         parsed_records = self._parse_messages(topic_name, messages)
         if not parsed_records:
             return
 
-        # Detect discriminator — re-evaluate periodically until one is found (JSON Schema only)
+        # Detect discriminator on every batch until one is found (JSON Schema only)
         discriminator = None
         if self.schema_format == "json-schema":
-            self._disc_record_counts[topic_name] = self._disc_record_counts.get(topic_name, 0) + len(parsed_records)
-            should_check = (
-                topic_name not in self._topic_discriminators
-                or (self._topic_discriminators[topic_name] is None
-                    and self._disc_record_counts.get(topic_name, 0) >= 500)
-            )
+            with self._metadata_lock:
+                cached_disc = self._topic_discriminators.get(topic_name, _SENTINEL)
+                # Buffer records for detection until a discriminator is found
+                if cached_disc is _SENTINEL or cached_disc is None:
+                    buf = self._disc_record_buffer.get(topic_name, [])
+                    buf.extend(parsed_records)
+                    if len(buf) > 200:
+                        buf = buf[-200:]
+                    self._disc_record_buffer[topic_name] = buf
 
-            if should_check:
-                self._disc_record_counts[topic_name] = 0
+            if cached_disc is _SENTINEL or cached_disc is None:
                 from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
                 analyzer = SchemaAnalyzer(
                     confidence_threshold=self.config.inference.confidence_threshold,
                     max_depth=self.config.inference.max_depth,
                 )
-                disc = analyzer.detect_discriminator(parsed_records)
-                self._topic_discriminators[topic_name] = disc
+                with self._metadata_lock:
+                    check_records = list(self._disc_record_buffer.get(topic_name, parsed_records))
+                disc = analyzer.detect_discriminator(check_records)
+                with self._metadata_lock:
+                    self._topic_discriminators[topic_name] = disc
+                    if disc:
+                        self._topic_event_types[topic_name] = set()
+                        self._disc_record_buffer.pop(topic_name, None)
                 if disc:
-                    self._topic_event_types[topic_name] = set()
                     click.echo(f"[{_ts()}] {topic_name}: Detected discriminator field '{disc}'")
 
-            discriminator = self._topic_discriminators.get(topic_name)
+            with self._metadata_lock:
+                discriminator = self._topic_discriminators.get(topic_name)
 
         if discriminator:
             self._process_multi_event_batch(topic_name, parsed_records, discriminator)
@@ -444,7 +467,8 @@ class LiveModeOrchestrator:
 
         any_changes = False
         new_event_type_discovered = False
-        known_types = self._topic_event_types.get(topic_name, set())
+        with self._metadata_lock:
+            known_types = set(self._topic_event_types.get(topic_name, set()))
 
         for event_type, records in groups.items():
             # State key: topic:event_type
@@ -473,7 +497,8 @@ class LiveModeOrchestrator:
                 if self.output_dir:
                     self._write_schema_file(f"{topic_name}.{event_type}", new_schema)
 
-        self._topic_event_types[topic_name] = known_types
+        with self._metadata_lock:
+            self._topic_event_types[topic_name] = known_types
 
         # Register if changes detected or new event type appeared
         if (any_changes or new_event_type_discovered) and self.register and self.registry:
@@ -493,7 +518,8 @@ class LiveModeOrchestrator:
         json_gen = JSONSchemaGenerator()
         merger = SchemaMerger()
 
-        event_types = sorted(self._topic_event_types.get(topic_name, set()))
+        with self._metadata_lock:
+            event_types = sorted(self._topic_event_types.get(topic_name, set()))
         if len(event_types) < 2:
             return
 
@@ -561,7 +587,10 @@ class LiveModeOrchestrator:
             topic_name, self.schema_format
         )
         previous_compat = None
-        if topic_name in self._topic_flat_registered:
+        with self._metadata_lock:
+            was_flat_registered = topic_name in self._topic_flat_registered
+
+        if was_flat_registered:
             try:
                 config_resp = self.registry.get_config(subject=main_subject)
                 previous_compat = config_resp.get("compatibilityLevel", self.config.schema_registry.compatibility)
@@ -573,31 +602,36 @@ class LiveModeOrchestrator:
             except Exception as e:
                 click.echo(f"[{_ts()}] {topic_name}: Failed to set compatibility for transition: {e}", err=True)
 
-        # Register
-        try:
-            reg_result = self.registry.register_multi_event_schemas(
-                topic_name, sub_contents, main_content, self.schema_format
-            )
-            with self._stats_lock:
-                self._total_registrations += len(reg_result)
-            self._topic_flat_registered.discard(topic_name)
-            click.echo(
-                f"[{_ts()}] {topic_name}: Registered {len(reg_result)} multi-event schemas "
-                f"({len(sub_contents)} sub + 1 main)"
-            )
-        except Exception as e:
-            click.echo(
-                f"[{_ts()}] {topic_name}: Multi-event registration failed: {e}",
-                err=True,
-            )
-
-        # Restore compatibility after transition
-        if previous_compat:
+        # Register (with semaphore for rate limiting)
+        with self._registration_semaphore:
             try:
-                self.registry.set_config({"compatibility": previous_compat}, subject=main_subject)
-                click.echo(f"[{_ts()}] {topic_name}: Restored compatibility to {previous_compat}")
-            except Exception:
-                pass
+                reg_result = self.registry.register_multi_event_schemas(
+                    topic_name, sub_contents, main_content, self.schema_format,
+                    skip_compatibility_set=was_flat_registered,
+                )
+                with self._stats_lock:
+                    self._total_registrations += len(reg_result)
+                with self._metadata_lock:
+                    self._topic_flat_registered.discard(topic_name)
+                click.echo(
+                    f"[{_ts()}] {topic_name}: Registered {len(reg_result)} multi-event schemas "
+                    f"({len(sub_contents)} sub + 1 main)"
+                )
+            except Exception as e:
+                click.echo(
+                    f"[{_ts()}] {topic_name}: Multi-event registration failed: {e}",
+                    err=True,
+                )
+            finally:
+                # Always restore compatibility after transition attempt
+                if previous_compat is not None:
+                    try:
+                        self.registry.set_config({"compatibility": previous_compat}, subject=main_subject)
+                        click.echo(f"[{_ts()}] {topic_name}: Restored compatibility to {previous_compat}")
+                    except Exception:
+                        self.logger.warning(
+                            f"{topic_name}: Failed to restore compatibility to {previous_compat}"
+                        )
 
         # Write main schema file
         if self.output_dir:
@@ -616,7 +650,10 @@ class LiveModeOrchestrator:
             return []
 
         # Detect format on first batch, cache for subsequent batches
-        if topic_name not in self._topic_formats:
+        with self._metadata_lock:
+            cached_format = self._topic_formats.get(topic_name)
+
+        if cached_format is None:
             if self.data_format != "auto":
                 detected_format = self.data_format
             else:
@@ -627,15 +664,21 @@ class LiveModeOrchestrator:
                     f"{topic_name}: Detected format {detected_format} "
                     f"(confidence: {confidence:.2f})"
                 )
-            self._topic_formats[topic_name] = detected_format
+
+            with self._metadata_lock:
+                # Double-check: another thread or rebalance may have acted
+                if topic_name not in self._topic_formats:
+                    self._topic_formats[topic_name] = detected_format
+                else:
+                    detected_format = self._topic_formats[topic_name]
 
             # Also cache on the state
             with self._states_lock:
                 state = self._states.get(topic_name)
             if state:
                 state.detected_format = detected_format
-
-        detected_format = self._topic_formats[topic_name]
+        else:
+            detected_format = cached_format
 
         # Create parser and parse
         try:
@@ -647,7 +690,8 @@ class LiveModeOrchestrator:
                 parser = ParserFactory.create_parser("raw-text")
                 parsed_data = parser.parse_batch(message_values)
                 if parsed_data:
-                    self._topic_formats[topic_name] = "raw-text"
+                    with self._metadata_lock:
+                        self._topic_formats[topic_name] = "raw-text"
 
             return parsed_data or []
         except Exception as e:
@@ -774,20 +818,12 @@ class LiveModeOrchestrator:
                         f"[{_ts()}] {topic_name}: Forcing registration "
                         f"(temporarily setting compatibility to NONE)"
                     )
+                    original_compat = self.config.schema_registry.compatibility
                     try:
-                        # Temporarily set config compatibility to NONE so that
-                        # register_schema()'s internal _set_subject_compatibility
-                        # call doesn't reset it back to BACKWARD before POSTing
-                        original_compat = self.config.schema_registry.compatibility
-                        self.config.schema_registry.compatibility = "NONE"
                         self.registry._set_subject_compatibility(subject, "NONE")
                         schema_id = self.registry.register_schema(
-                            topic_name, schema_content, self.schema_format
-                        )
-                        # Restore original compatibility
-                        self.config.schema_registry.compatibility = original_compat
-                        self.registry._set_subject_compatibility(
-                            subject, original_compat
+                            topic_name, schema_content, self.schema_format,
+                            skip_compatibility_set=True,
                         )
                         click.echo(
                             f"[{_ts()}] {topic_name}: Schema force-registered (ID: {schema_id})"
@@ -795,12 +831,17 @@ class LiveModeOrchestrator:
                         with self._stats_lock:
                             self._total_registrations += 1
                     except Exception as e:
-                        # Restore compatibility even on error
-                        self.config.schema_registry.compatibility = compatibility
                         click.echo(
                             f"[{_ts()}] {topic_name}: Force registration failed: {e}",
                             err=True,
                         )
+                    finally:
+                        try:
+                            self.registry._set_subject_compatibility(subject, original_compat)
+                        except Exception:
+                            self.logger.warning(
+                                f"{topic_name}: Failed to restore subject compatibility to {original_compat}"
+                            )
                     return
                 elif self.on_incompatible == "fail":
                     click.echo(
@@ -815,7 +856,8 @@ class LiveModeOrchestrator:
                 schema_id = self.registry.register_schema(
                     topic_name, schema_content, self.schema_format
                 )
-                self._topic_flat_registered.add(topic_name)
+                with self._metadata_lock:
+                    self._topic_flat_registered.add(topic_name)
                 label = "Initial schema registered" if is_initial else "Schema updated"
                 click.echo(f"[{_ts()}] {topic_name}: {label} (ID: {schema_id})")
                 with self._stats_lock:
@@ -939,7 +981,9 @@ class LiveModeOrchestrator:
         evict_threshold = self.config.live.idle_evict_seconds
         to_evict = []
 
-        for topic_name, last_active in self._topic_last_activity.items():
+        with self._metadata_lock:
+            activity_snapshot = dict(self._topic_last_activity)
+        for topic_name, last_active in activity_snapshot.items():
             if now - last_active > evict_threshold and topic_name in self._states:
                 to_evict.append(topic_name)
 
@@ -991,9 +1035,11 @@ class LiveModeOrchestrator:
     def _print_periodic_summary(self) -> None:
         """Print periodic summary for large topic sets."""
         elapsed = time.time() - self._start_time
+        with self._metadata_lock:
+            activity_values = list(self._topic_last_activity.values())
         active = sum(
             1
-            for t in self._topic_last_activity.values()
+            for t in activity_values
             if time.time() - t < self.config.live.summary_interval_seconds
         )
         with self._states_lock:
@@ -1011,9 +1057,11 @@ class LiveModeOrchestrator:
         """Print summary on shutdown."""
         elapsed = time.time() - self._start_time
         click.echo(f"\nLive mode stopped.")
+        with self._metadata_lock:
+            topic_count_seen = len(self._topic_last_activity)
         click.echo(
             f"  Processed {self._total_messages} messages across "
-            f"{len(self._topic_last_activity)} topics "
+            f"{topic_count_seen} topics "
             f"in {_format_duration(elapsed)}"
         )
         if self._total_registrations > 0:

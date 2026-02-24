@@ -133,7 +133,7 @@ class LiveConfig(BaseModel):
 
     consumer_group: str = Field(default="schema-infer-live", description="Stable consumer group ID for offset tracking")
     batch_size: int = Field(default=100, description="Number of messages to accumulate before re-inferring schema")
-    batch_timeout_seconds: float = Field(default=30.0, description="Maximum seconds to wait for batch_size messages before processing")
+    batch_timeout_seconds: float = Field(default=60.0, description="Maximum seconds to wait for batch_size messages before processing")
     state_dir: Optional[str] = Field(default=None, description="Directory for persisting incremental schema state (default: ~/.schema-infer/state/)")
     persist_state: bool = Field(default=True, description="Whether to persist schema state to disk for resume-on-restart")
     initial_offset: str = Field(default="latest", description="Where to start consuming if no committed offsets exist (earliest/latest)")

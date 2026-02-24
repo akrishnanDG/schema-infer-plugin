@@ -64,6 +64,7 @@ class SchemaRegistry:
         schema_type: str = "AVRO",
         references: Optional[List[Dict[str, Any]]] = None,
         subject_override: Optional[str] = None,
+        skip_compatibility_set: bool = False,
     ) -> int:
         """
         Register a schema in the Schema Registry using topic name strategy.
@@ -75,6 +76,8 @@ class SchemaRegistry:
             schema_type: Schema type for registry (AVRO, PROTOBUF, JSON)
             references: Optional list of schema references for composition
             subject_override: Optional subject name override (bypasses strategy)
+            skip_compatibility_set: If True, skip automatic subject compatibility
+                setting (used when caller manages compatibility directly)
 
         Returns:
             Schema ID
@@ -90,7 +93,7 @@ class SchemaRegistry:
             if references:
                 schema_data["references"] = references
 
-            if self.config.schema_registry.compatibility != "NONE":
+            if not skip_compatibility_set and self.config.schema_registry.compatibility != "NONE":
                 self._set_subject_compatibility(subject_name, self.config.schema_registry.compatibility)
 
             url = f"{self.base_url}/subjects/{subject_name}/versions"
@@ -156,6 +159,7 @@ class SchemaRegistry:
         schema_contents: Dict[str, str],
         main_schema_content: str,
         schema_format: str,
+        skip_compatibility_set: bool = False,
     ) -> Dict[str, int]:
         """
         Register multi-event schemas with references.
@@ -168,6 +172,8 @@ class SchemaRegistry:
             schema_contents: Dict mapping event type to schema JSON string
             main_schema_content: Main oneOf schema JSON string
             schema_format: Schema format (json-schema, avro, protobuf)
+            skip_compatibility_set: If True, skip automatic subject compatibility
+                setting (used when caller manages compatibility directly)
 
         Returns:
             Dict mapping subject name to schema ID
@@ -183,6 +189,7 @@ class SchemaRegistry:
                 schema_content,
                 schema_format,
                 subject_override=subject,
+                skip_compatibility_set=skip_compatibility_set,
             )
             result[subject] = schema_id
             # Get actual version after registration for accurate references
@@ -204,6 +211,7 @@ class SchemaRegistry:
             main_schema_content,
             schema_format,
             references=references,
+            skip_compatibility_set=skip_compatibility_set,
         )
         main_subject = self._generate_subject_name(topic_name, schema_format)
         result[main_subject] = main_schema_id

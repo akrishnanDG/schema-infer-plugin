@@ -254,7 +254,7 @@ topic_filter:
 live:
   consumer_group: "schema-infer-live"     # Stable consumer group for offset tracking
   batch_size: 100                          # Messages per batch (auto-scales with topic count)
-  batch_timeout_seconds: 30.0             # Max seconds to wait for batch_size messages
+  batch_timeout_seconds: 60.0             # Max seconds to wait for batch_size messages
   state_dir: "~/.schema-infer/state"      # Directory for persisting schema state
   persist_state: true                      # Enable state persistence for resume-on-restart
   initial_offset: "latest"                # Where to start if no committed offsets (earliest/latest)
@@ -461,6 +461,9 @@ Continuously consume messages from Kafka topics, incrementally build schemas, de
 # Basic: monitor one topic and register changes
 schema-infer --config config.yaml live --topic orders --register
 
+# Bootstrap from existing topic data (reads from beginning)
+schema-infer --config config.yaml live --topic orders --register --from-beginning
+
 # Multiple topics with custom batch tuning
 schema-infer --config config.yaml live \
   --topics "orders,payments,users" \
@@ -489,20 +492,24 @@ schema-infer --config config.yaml live \
 | `--context` | none | Schema Registry context prefix |
 | `--consumer-group` | `schema-infer-live` | Consumer group for offset tracking |
 | `--batch-size` | `100` | Messages per batch (auto-scales with topic count) |
-| `--batch-timeout` | `30.0` | Seconds to wait for a batch |
+| `--batch-timeout` | `60.0` | Seconds to wait for a batch |
 | `--state-dir` | `~/.schema-infer/state/` | State persistence directory |
 | `--no-persist-state` | off | Disable state persistence |
 | `--data-format` | `auto` | Force data format (json, csv, key-value) |
 | `--on-incompatible` | `skip` | Behavior on incompatible schemas (skip, log, force, fail) |
+| `--from-beginning` | off | Start from earliest offset for initial bootstrap |
 | `--exclude-internal` | on | Exclude internal topics |
 
 The live command:
-- Continuously consumes new messages as they arrive
+- By default, processes only new messages arriving after the consumer starts (`latest`)
+- Use `--from-beginning` to bootstrap schemas from existing topic data (only applies when no committed offsets exist for the consumer group — subsequent runs resume from committed offsets)
 - Incrementally merges field statistics across batches (Counter-based)
 - Detects structural schema changes: new fields, removed fields, type changes, nullability changes
+- Re-evaluates discriminator detection on every batch cycle until one is found, using a buffer of recent records (up to 200) across batches
 - Checks compatibility before registration (`--on-incompatible` controls behavior)
 - Persists state to disk for resume-on-restart after Ctrl+C
 - Auto-scales batch size and thread pool workers based on topic count
+- Thread-safe parallel processing with `_metadata_lock` protecting shared topic metadata
 - Supports multi-instance horizontal scaling via shared consumer groups
 
 ##### Choosing the Right Command
@@ -869,7 +876,7 @@ Topics that contain multiple event types (e.g., user events and payment events i
 1. The tool scans for candidate discriminator fields (top-level string fields with low cardinality)
 2. Fields with well-known names (`event_type`, `type`, `action`, `kind`, etc.) are prioritized
 3. A candidate is only accepted if grouping records by its values produces groups with **different field sets** — if all groups have identical fields, the candidate is rejected (it's just a value variation, not different event types)
-4. Detection is **periodic** — re-evaluates every 500 records while no discriminator is found, so topics with uniform early data can still be classified as multi-event later
+4. In live mode, detection runs on **every batch cycle** until a discriminator is found, using a rolling buffer of recent records (up to 200) across batches — so topics with uniform early data can still be classified as multi-event once diverse events appear
 5. If a valid discriminator is found, per-type schemas are generated; otherwise, a flat schema is produced
 6. Schema references use the **actual version number** from Schema Registry, not a hardcoded value
 7. If a flat schema was previously registered and a discriminator is later detected, the tool handles the transition by temporarily setting subject compatibility to NONE, registering the `oneOf` schema, then restoring the original compatibility
