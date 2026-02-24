@@ -27,8 +27,8 @@ from ..utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 # Plugin version information
-PLUGIN_VERSION = "1.3.0"
-PLUGIN_BUILD = "2026-02-13"
+PLUGIN_VERSION = "1.4.0"
+PLUGIN_BUILD = "2026-02-24"
 
 
 def _extract_event_types(main_schema_json: str, topic_name: str) -> set:
