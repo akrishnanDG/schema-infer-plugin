@@ -15,7 +15,7 @@ Schemaless Kafka topics
     |
     +-> schema-infer reads messages, infers structure
     |
-    +-> Registers Avro/Protobuf/JSON Schema to Schema Registry
+    +-> Registers JSON Schema to Schema Registry
     |
     +-> Tableflow materializes topic as Iceberg/Delta Lake table
 ```
