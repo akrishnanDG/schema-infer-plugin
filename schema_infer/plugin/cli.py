@@ -210,6 +210,20 @@ def main(
     is_flag=True,
     help="Show authentication information for debugging",
 )
+@click.option(
+    "--message",
+    help="Infer schema from a JSON string instead of Kafka (e.g., '{\"id\": 1, \"name\": \"test\"}')",
+)
+@click.option(
+    "--data-file",
+    type=click.Path(exists=True, path_type=Path),
+    help="Infer schema from a file containing JSON objects (one per line or a JSON array)",
+)
+@click.option(
+    "--schema-name",
+    default="inferred",
+    help="Schema name when using --message or --data-file (default: 'inferred')",
+)
 @click.pass_context
 def infer(
     ctx: click.Context,
@@ -231,6 +245,9 @@ def infer(
     additional_exclude_prefixes: Optional[str],
     context: Optional[str],
     show_auth_info: bool,
+    message: Optional[str],
+    data_file: Optional[Path],
+    schema_name: str,
 ) -> None:
     """
     Infer schemas from Kafka topic data
@@ -283,6 +300,14 @@ def infer(
     \b
     # Force specific data format detection
     schema-infer infer --topic csv-data --data-format csv --format json-schema
+
+    \b
+    # Infer schema from a JSON string (no Kafka required)
+    schema-infer infer --message '{"user_id": "123", "name": "John", "age": 30}' --output user.json
+
+    \b
+    # Infer schema from a file (JSON array or one JSON object per line)
+    schema-infer infer --data-file sample-data.json --output schema.json --format avro
     """
 
     config = ctx.obj["config"]
@@ -312,9 +337,72 @@ def infer(
         )
         discriminator = None
 
-    # Validate input
+    # Local inference from --message or --data-file (no Kafka required)
+    if message or data_file:
+        import json as _json
+
+        records = []
+        if message:
+            try:
+                parsed = _json.loads(message)
+                records = [parsed] if isinstance(parsed, dict) else parsed
+            except _json.JSONDecodeError as e:
+                click.echo(f"Error: Invalid JSON in --message: {e}", err=True)
+                sys.exit(1)
+        elif data_file:
+            try:
+                content = data_file.read_text()
+                try:
+                    parsed = _json.loads(content)
+                    records = [parsed] if isinstance(parsed, dict) else parsed
+                except _json.JSONDecodeError:
+                    # Try JSONL (one JSON object per line)
+                    records = []
+                    for line in content.strip().splitlines():
+                        line = line.strip()
+                        if line:
+                            records.append(_json.loads(line))
+            except Exception as e:
+                click.echo(f"Error: Failed to read {data_file}: {e}", err=True)
+                sys.exit(1)
+
+        if not records:
+            click.echo("Error: No records found in input", err=True)
+            sys.exit(1)
+
+        # Convert to Kafka message format: List[Tuple[Optional[bytes], bytes]]
+        messages_list = [(None, _json.dumps(r).encode("utf-8")) for r in records]
+
+        inferrer = SchemaInferrer(config)
+        schema_dict = inferrer.infer_schema(messages_list, schema_name)
+
+        if not schema_dict:
+            click.echo("Error: Failed to infer schema from input", err=True)
+            sys.exit(1)
+
+        schema_content = inferrer.generate_schema(schema_dict, format)
+
+        if output:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(schema_content)
+            click.echo(f"Schema written to {output}")
+        else:
+            click.echo(schema_content)
+
+        if register:
+            registry = SchemaRegistry(config)
+            try:
+                schema_id = registry.register_schema(schema_name, schema_content, format)
+                click.echo(f"Registered schema with ID: {schema_id}")
+            except Exception as e:
+                click.echo(f"Error registering schema: {e}", err=True)
+                sys.exit(1)
+
+        return
+
+    # Validate input — Kafka mode requires topic specification
     if not any([topic, topics, topic_prefix, topic_pattern]):
-        click.echo("Error: Must specify either --topic, --topics, --topic-prefix, or --topic-pattern", err=True)
+        click.echo("Error: Must specify either --topic, --topics, --topic-prefix, --topic-pattern, --message, or --data-file", err=True)
         sys.exit(1)
 
     if not register and not output and not output_dir:
