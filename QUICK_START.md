@@ -61,6 +61,16 @@ schema-infer infer --topic-prefix "prod-" --output-dir schemas/ --format json-sc
 schema-infer infer --topic user-events --format avro --register
 ```
 
+### 5. Infer Without Kafka
+
+```bash
+# From a JSON string
+schema-infer infer --message '{"user_id": "123", "name": "John", "age": 30}'
+
+# From a data file (JSONL or JSON array)
+schema-infer infer --data-file sample-data.jsonl --output schema.json --schema-name orders
+```
+
 ## Configuration
 
 ### Basic Configuration File

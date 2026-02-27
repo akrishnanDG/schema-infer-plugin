@@ -115,6 +115,10 @@ schema-infer infer --topics "user-events,order-events,payment-events" --output-d
 # Generate Avro or Protobuf instead
 schema-infer infer --topic user-events --format avro --register
 schema-infer infer --topic user-events --format protobuf --output user-schema.proto
+
+# Infer from JSON directly (no Kafka required)
+schema-infer infer --message '{"user_id": "123", "name": "John", "age": 30}'
+schema-infer infer --data-file sample-data.jsonl --output schema.json --schema-name orders
 ```
 
 ## Configuration

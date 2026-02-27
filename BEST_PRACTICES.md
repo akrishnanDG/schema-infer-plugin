@@ -118,6 +118,9 @@ Run inference without `--register` first to inspect the generated schema:
 # Generate schema files for review
 schema-infer infer --topic orders --output-dir ./schemas-review/
 
+# Or test with sample data before connecting to Kafka
+schema-infer infer --data-file sample-orders.jsonl --output schema-review.json
+
 # Review, then register
 schema-infer infer --topic orders --register
 ```

@@ -49,6 +49,9 @@ schema-infer infer [OPTIONS]
 | `--register` | `-r` | Boolean | Register schema in Schema Registry | False |
 | `--max-messages` | `-m` | Integer | Maximum messages to read | 50 |
 | `--timeout` | `-T` | Integer | Timeout in seconds | 20 |
+| `--message` | | String | Infer schema from a JSON string (no Kafka required) | None |
+| `--data-file` | | Path | Infer schema from a file (JSON array or JSONL) | None |
+| `--schema-name` | | String | Schema name for `--message` / `--data-file` | `inferred` |
 | `--exclude-internal` | | Boolean | Exclude internal topics | True |
 | `--internal-prefix` | | String | Custom internal topic prefix | "__" |
 | `--additional-exclude-prefixes` | | String | Additional prefixes to exclude | None |
@@ -68,6 +71,12 @@ schema-infer infer --topic-prefix "prod-" --output-dir schemas/ --format protobu
 
 # Register in Schema Registry
 schema-infer infer --topic user-events --format avro --register
+
+# Infer from JSON string (no Kafka required)
+schema-infer infer --message '{"user_id": "123", "name": "John"}' --output user.json
+
+# Infer from data file
+schema-infer infer --data-file events.jsonl --schema-name events --format avro --register
 ```
 
 ### `list-topics` Command

@@ -371,7 +371,7 @@ schema-infer [GLOBAL_OPTIONS] COMMAND [COMMAND_OPTIONS]
 
 #### `infer` - Schema Inference
 
-Generate schemas from Kafka topics.
+Generate schemas from Kafka topics, JSON strings, or data files.
 
 ```bash
 schema-infer infer [OPTIONS]
@@ -388,6 +388,9 @@ schema-infer infer [OPTIONS]
 - `--register, -r`: Register schema in Schema Registry
 - `--max-messages, -m`: Maximum messages to read (default: 50)
 - `--timeout, -T`: Timeout in seconds (default: 30)
+- `--message`: Infer schema from a JSON string (no Kafka required)
+- `--data-file`: Infer schema from a file (JSON array or one JSON object per line)
+- `--schema-name`: Schema name when using `--message` or `--data-file` (default: 'inferred')
 - `--exclude-internal`: Exclude internal topics
 - `--internal-prefix`: Custom internal topic prefix
 - `--additional-exclude-prefixes`: Additional prefixes to exclude
@@ -410,6 +413,15 @@ schema-infer infer --topic user-events --format avro --register
 
 # Custom configuration
 schema-infer infer --topic user-events --max-messages 5000 --timeout 60 --format json-schema
+
+# Infer from a JSON string (no Kafka required)
+schema-infer infer --message '{"user_id": "123", "name": "John", "age": 30}'
+
+# Infer from a data file (JSONL or JSON array)
+schema-infer infer --data-file sample-data.jsonl --output schema.json --schema-name orders
+
+# Infer from a file and register directly
+schema-infer infer --data-file events.json --schema-name events --format avro --register
 ```
 
 #### `list-topics` - Topic Discovery
