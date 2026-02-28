@@ -1,6 +1,6 @@
 # Schema Inference Plugin
 
-[![Version](https://img.shields.io/badge/version-1.4.2-blue.svg)](https://github.com/example/schema-infer-plugin)
+[![Version](https://img.shields.io/badge/version-1.4.3-blue.svg)](https://github.com/example/schema-infer-plugin)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-comprehensive-green.svg)](tests/)
