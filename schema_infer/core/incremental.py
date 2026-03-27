@@ -91,7 +91,9 @@ class IncrementalSchemaState:
         self.last_updated: float = time.time()
         self.dirty: bool = False
         self.logger = get_logger(__name__)
-        self._lock = threading.Lock()  # Protects field_analysis and total_records_processed
+        self._lock = (
+            threading.Lock()
+        )  # Protects field_analysis and total_records_processed
 
         self.schema_analyzer = SchemaAnalyzer(
             confidence_threshold=config.inference.confidence_threshold,
@@ -139,7 +141,16 @@ class IncrementalSchemaState:
                 state.field_analysis[field_name] = {
                     "types": Counter({field_type: 1}),
                     "values": [],
-                    "null_count": 1 if "null" in (field_def.get("type", []) if isinstance(field_def.get("type"), list) else []) else 0,
+                    "null_count": (
+                        1
+                        if "null"
+                        in (
+                            field_def.get("type", [])
+                            if isinstance(field_def.get("type"), list)
+                            else []
+                        )
+                        else 0
+                    ),
                     "total_count": 1,
                     "examples": set(),
                 }
@@ -189,7 +200,9 @@ class IncrementalSchemaState:
             # producers change, bugs happen, different versions coexist.
             fields = []
             for field_name, analysis in list(self.field_analysis.items()):
-                schema_field = self.schema_analyzer.create_schema_field(field_name, analysis)
+                schema_field = self.schema_analyzer.create_schema_field(
+                    field_name, analysis
+                )
                 if schema_field:
                     schema_field.required = False
                     if not schema_field.field_type.nullable:
@@ -211,7 +224,9 @@ class IncrementalSchemaState:
 
         return new_schema
 
-    def detect_changes(self, new_schema: InferredSchema) -> Optional[SchemaChangeReport]:
+    def detect_changes(
+        self, new_schema: InferredSchema
+    ) -> Optional[SchemaChangeReport]:
         """
         Compare a new schema against the last known schema.
 
@@ -318,7 +333,9 @@ class IncrementalSchemaState:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], config: Config) -> "IncrementalSchemaState":
+    def from_dict(
+        cls, data: Dict[str, Any], config: Config
+    ) -> "IncrementalSchemaState":
         """Deserialize state from a dictionary."""
         state = cls(topic_name=data["topic_name"], config=config)
         state.total_records_processed = data.get("total_records_processed", 0)

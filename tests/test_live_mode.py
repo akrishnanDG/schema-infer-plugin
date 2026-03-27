@@ -16,10 +16,10 @@ from schema_infer.config import Config
 from schema_infer.plugin.live import LiveModeOrchestrator
 from schema_infer.core.incremental import IncrementalSchemaState, SchemaChangeReport
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_config():
     """Build a Config with all fields the orchestrator touches."""
@@ -93,6 +93,7 @@ def _make_orchestrator(
 # TestPartitionOwnership
 # ===========================================================================
 
+
 class TestPartitionOwnership:
     """Tests for the _owns_partition_zero helper."""
 
@@ -118,6 +119,7 @@ class TestPartitionOwnership:
 # ===========================================================================
 # TestOnTopicsAssigned
 # ===========================================================================
+
 
 class TestOnTopicsAssigned:
     """Tests for the _on_topics_assigned rebalance callback."""
@@ -154,6 +156,7 @@ class TestOnTopicsAssigned:
 # ===========================================================================
 # TestOnTopicsRevoked
 # ===========================================================================
+
 
 class TestOnTopicsRevoked:
     """Tests for the _on_topics_revoked rebalance callback."""
@@ -214,6 +217,7 @@ class TestOnTopicsRevoked:
 # ===========================================================================
 # TestParseMessages
 # ===========================================================================
+
 
 class TestParseMessages:
     """Tests for _parse_messages."""
@@ -278,6 +282,7 @@ class TestParseMessages:
 # ===========================================================================
 # TestDiscriminatorDetection
 # ===========================================================================
+
 
 class TestDiscriminatorDetection:
     """Tests for discriminator detection in _process_topic_batch."""
@@ -422,6 +427,7 @@ class TestDiscriminatorDetection:
 # TestProcessFlatBatch
 # ===========================================================================
 
+
 class TestProcessFlatBatch:
     """Tests for _process_flat_batch."""
 
@@ -494,6 +500,7 @@ class TestProcessFlatBatch:
 # TestProcessMultiEventBatch
 # ===========================================================================
 
+
 class TestProcessMultiEventBatch:
     """Tests for _process_multi_event_batch."""
 
@@ -560,6 +567,7 @@ class TestProcessMultiEventBatch:
 # TestFlatToMultiTransition
 # ===========================================================================
 
+
 class TestFlatToMultiTransition:
     """Tests for flat-to-multi-event schema transition in _handle_multi_event_registration."""
 
@@ -623,10 +631,11 @@ class TestFlatToMultiTransition:
         # Verify compatibility was set to NONE during transition
         set_config_calls = orch.registry.set_config.call_args_list
         none_calls = [
-            c for c in set_config_calls
-            if c[0][0].get("compatibility") == "NONE"
+            c for c in set_config_calls if c[0][0].get("compatibility") == "NONE"
         ]
-        assert len(none_calls) >= 1, "set_config(NONE) should be called during transition"
+        assert (
+            len(none_calls) >= 1
+        ), "set_config(NONE) should be called during transition"
 
     @patch("schema_infer.schemas.generators.JSONSchemaGenerator")
     @patch("schema_infer.core.merger.SchemaMerger")
@@ -669,8 +678,7 @@ class TestFlatToMultiTransition:
         # The last set_config call should restore BACKWARD
         set_config_calls = orch.registry.set_config.call_args_list
         restore_calls = [
-            c for c in set_config_calls
-            if c[0][0].get("compatibility") == "BACKWARD"
+            c for c in set_config_calls if c[0][0].get("compatibility") == "BACKWARD"
         ]
         assert len(restore_calls) >= 1, "Compatibility should be restored to BACKWARD"
 
@@ -711,7 +719,9 @@ class TestFlatToMultiTransition:
         mock_merger_cls.return_value = mock_merger
 
         # Make registration blow up
-        orch.registry.register_multi_event_schemas.side_effect = Exception("Registry down")
+        orch.registry.register_multi_event_schemas.side_effect = Exception(
+            "Registry down"
+        )
 
         # Should NOT raise — error is caught internally
         orch._handle_multi_event_registration(topic, "event_type")
@@ -719,12 +729,11 @@ class TestFlatToMultiTransition:
         # Compatibility should STILL be restored (finally block)
         set_config_calls = orch.registry.set_config.call_args_list
         restore_calls = [
-            c for c in set_config_calls
-            if c[0][0].get("compatibility") == "BACKWARD"
+            c for c in set_config_calls if c[0][0].get("compatibility") == "BACKWARD"
         ]
-        assert len(restore_calls) >= 1, (
-            "Compatibility should be restored even when registration fails"
-        )
+        assert (
+            len(restore_calls) >= 1
+        ), "Compatibility should be restored even when registration fails"
 
     @patch("schema_infer.schemas.generators.JSONSchemaGenerator")
     @patch("schema_infer.core.merger.SchemaMerger")
@@ -773,17 +782,17 @@ class TestFlatToMultiTransition:
         # optimistic check detected that the existing schema is already oneOf.
         set_config_calls = orch.registry.set_config.call_args_list
         none_calls = [
-            c for c in set_config_calls
-            if c[0][0].get("compatibility") == "NONE"
+            c for c in set_config_calls if c[0][0].get("compatibility") == "NONE"
         ]
-        assert len(none_calls) == 0, (
-            "set_config(NONE) should NOT be called when SR already has oneOf"
-        )
+        assert (
+            len(none_calls) == 0
+        ), "set_config(NONE) should NOT be called when SR already has oneOf"
 
 
 # ===========================================================================
 # TestEvictIdleStates
 # ===========================================================================
+
 
 class TestEvictIdleStates:
     """Tests for _evict_idle_states."""

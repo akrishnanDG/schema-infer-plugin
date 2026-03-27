@@ -48,11 +48,17 @@ class LiveConsumer:
         self.consumer: Optional[Consumer] = None
         self._assigned_partitions: List[Any] = []
         self._assigned_topics: Set[str] = set()
-        self._partition_lock = threading.Lock()  # Protects _assigned_partitions and _assigned_topics
+        self._partition_lock = (
+            threading.Lock()
+        )  # Protects _assigned_partitions and _assigned_topics
 
         # Rebalance callbacks for the orchestrator
-        self._on_topics_assigned: Optional[Callable[[Set[str], Dict[str, Set[int]]], None]] = None
-        self._on_topics_revoked: Optional[Callable[[Set[str], Dict[str, Set[int]]], None]] = None
+        self._on_topics_assigned: Optional[
+            Callable[[Set[str], Dict[str, Set[int]]], None]
+        ] = None
+        self._on_topics_revoked: Optional[
+            Callable[[Set[str], Dict[str, Set[int]]], None]
+        ] = None
 
         self._initialize_consumer()
 
@@ -190,9 +196,7 @@ class LiveConsumer:
             with self._partition_lock:
                 self._assigned_topics -= revoked_topics
 
-        self.consumer.subscribe(
-            topics, on_assign=on_assign, on_revoke=on_revoke
-        )
+        self.consumer.subscribe(topics, on_assign=on_assign, on_revoke=on_revoke)
         self.logger.info(f"Subscribed to {len(topics)} topics")
 
     @property

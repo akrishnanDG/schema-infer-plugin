@@ -49,18 +49,15 @@ def sample_data():
                     "street": "123 Main St",
                     "city": "New York",
                     "zipCode": "10001",
-                    "coordinates": {
-                        "latitude": 40.7128,
-                        "longitude": -74.0060
-                    }
+                    "coordinates": {"latitude": 40.7128, "longitude": -74.0060},
                 },
                 "phoneNumbers": [
                     {"type": "home", "number": "555-1234"},
-                    {"type": "work", "number": "555-5678"}
+                    {"type": "work", "number": "555-5678"},
                 ],
                 "tags": ["developer", "senior", "remote"],
                 "scores": [95, 87, 92, 88],
-                "ratings": [4.5, 4.2, 4.8, 4.1]
+                "ratings": [4.5, 4.2, 4.8, 4.1],
             },
             "orders": [
                 {
@@ -68,28 +65,24 @@ def sample_data():
                     "total": 99.99,
                     "items": [
                         {"name": "laptop", "price": 999.99, "quantity": 1},
-                        {"name": "mouse", "price": 29.99, "quantity": 2}
+                        {"name": "mouse", "price": 29.99, "quantity": 2},
                     ],
                     "shipping": {
                         "method": "express",
                         "cost": 15.99,
-                        "estimatedDays": 2
-                    }
+                        "estimatedDays": 2,
+                    },
                 }
             ],
             "preferences": {
                 "theme": "dark",
-                "notifications": {
-                    "email": True,
-                    "sms": False,
-                    "push": True
-                },
+                "notifications": {"email": True, "sms": False, "push": True},
                 "languages": ["en", "es", "fr"],
                 "settings": {
                     "autoSave": True,
                     "backupFrequency": 24,
-                    "maxFileSize": 10485760.5
-                }
+                    "maxFileSize": 10485760.5,
+                },
             },
             "emptyObject": {},
             "emptyArray": [],
@@ -101,19 +94,15 @@ def sample_data():
                 "createdAt": "2025-01-15T10:30:00Z",
                 "updatedAt": "2025-01-16T14:22:00Z",
                 "version": 2,
-                "flags": {
-                    "featureA": True,
-                    "featureB": False,
-                    "featureC": None
-                },
+                "flags": {"featureA": True, "featureB": False, "featureC": None},
                 "tags": ["production", "v2", "stable"],
                 "config": {
                     "timeout": 30,
                     "retries": 3,
                     "enabled": True,
-                    "threshold": 0.95
-                }
-            }
+                    "threshold": 0.95,
+                },
+            },
         }
     ]
 
@@ -124,7 +113,7 @@ def json_messages():
     return [
         (None, b'{"name": "John", "age": 30}'),
         (None, b'{"id": 1, "active": true}'),
-        (None, b'{"data": {"nested": "value"}}')
+        (None, b'{"data": {"nested": "value"}}'),
     ]
 
 
@@ -132,9 +121,9 @@ def json_messages():
 def csv_messages():
     """Provide CSV format messages for testing."""
     return [
-        (None, b'name,age,city\nJohn,30,New York'),
-        (None, b'id,status,value\n1,active,100'),
-        (None, b'product,price,quantity\nlaptop,999.99,1')
+        (None, b"name,age,city\nJohn,30,New York"),
+        (None, b"id,status,value\n1,active,100"),
+        (None, b"product,price,quantity\nlaptop,999.99,1"),
     ]
 
 
@@ -142,9 +131,9 @@ def csv_messages():
 def key_value_messages():
     """Provide key-value format messages for testing."""
     return [
-        (None, b'name=John age=30 city=New York'),
-        (None, b'id=1 status=active value=100'),
-        (None, b'product=laptop price=999.99 quantity=1')
+        (None, b"name=John age=30 city=New York"),
+        (None, b"id=1 status=active value=100"),
+        (None, b"product=laptop price=999.99 quantity=1"),
     ]
 
 
@@ -152,9 +141,9 @@ def key_value_messages():
 def raw_text_messages():
     """Provide raw text messages for testing."""
     return [
-        (None, b'This is plain text'),
-        (None, b'Another line of text'),
-        (None, b'No specific format here')
+        (None, b"This is plain text"),
+        (None, b"Another line of text"),
+        (None, b"No specific format here"),
     ]
 
 
@@ -162,9 +151,9 @@ def raw_text_messages():
 def binary_messages():
     """Provide binary messages for testing."""
     return [
-        (None, b'\x00\x01\x02\x03\x04'),
-        (None, b'\xff\xfe\xfd\xfc'),
-        (None, b'Some text with \x00 null bytes')
+        (None, b"\x00\x01\x02\x03\x04"),
+        (None, b"\xff\xfe\xfd\xfc"),
+        (None, b"Some text with \x00 null bytes"),
     ]
 
 
@@ -193,13 +182,13 @@ performance:
   show_progress: true
   verbose_logging: false
 """
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(config_content)
         temp_file = f.name
-    
+
     yield temp_file
-    
+
     # Cleanup
     if os.path.exists(temp_file):
         os.unlink(temp_file)
@@ -222,7 +211,7 @@ def mock_kafka_metadata():
             "test-order-events": {"partitions": {0: {}}},
             "temp-topic": {"partitions": {0: {}}},
             "backup-topic": {"partitions": {0: {}}},
-            "system-logs": {"partitions": {0: {}}}
+            "system-logs": {"partitions": {0: {}}},
         }
     }
     return mock_metadata
@@ -235,7 +224,7 @@ def mock_schema_registry_response():
         "id": 1,
         "version": 1,
         "subject": "test-topic-value",
-        "schema": '{"type":"record","name":"TestRecord","fields":[]}'
+        "schema": '{"type":"record","name":"TestRecord","fields":[]}',
     }
 
 
@@ -245,12 +234,8 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )
-    config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests"
-    )
-    config.addinivalue_line(
-        "markers", "unit: marks tests as unit tests"
-    )
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
+    config.addinivalue_line("markers", "unit: marks tests as unit tests")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -259,11 +244,11 @@ def pytest_collection_modifyitems(config, items):
         # Add slow marker to tests that might take time
         if "performance" in item.name or "large" in item.name:
             item.add_marker(pytest.mark.slow)
-        
+
         # Add integration marker to integration tests
         if "integration" in item.name or "end_to_end" in item.name:
             item.add_marker(pytest.mark.integration)
-        
+
         # Add unit marker to unit tests
         if "test_" in item.name and "integration" not in item.name:
             item.add_marker(pytest.mark.unit)

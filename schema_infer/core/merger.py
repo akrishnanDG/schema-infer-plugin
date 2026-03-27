@@ -123,9 +123,13 @@ class SchemaMerger:
                 continue
 
             # Both are objects with properties: deep merge
-            if (existing_type == "object"
-                    and isinstance(existing_def, dict) and "properties" in existing_def
-                    and isinstance(new_def, dict) and "properties" in new_def):
+            if (
+                existing_type == "object"
+                and isinstance(existing_def, dict)
+                and "properties" in existing_def
+                and isinstance(new_def, dict)
+                and "properties" in new_def
+            ):
                 merged_nested = self._merge_properties(
                     existing_def.get("properties", {}),
                     new_def.get("properties", {}),
@@ -136,16 +140,24 @@ class SchemaMerger:
                 continue
 
             # Both are arrays: merge items if present
-            if (existing_type == "array"
-                    and isinstance(existing_def, dict) and "items" in existing_def
-                    and isinstance(new_def, dict) and "items" in new_def):
+            if (
+                existing_type == "array"
+                and isinstance(existing_def, dict)
+                and "items" in existing_def
+                and isinstance(new_def, dict)
+                and "items" in new_def
+            ):
                 existing_items = existing_def["items"]
                 new_items = new_def["items"]
                 merged_def = dict(existing_def)
 
                 # Array of objects: merge items.properties
-                if (isinstance(existing_items, dict) and "properties" in existing_items
-                        and isinstance(new_items, dict) and "properties" in new_items):
+                if (
+                    isinstance(existing_items, dict)
+                    and "properties" in existing_items
+                    and isinstance(new_items, dict)
+                    and "properties" in new_items
+                ):
                     merged_item_props = self._merge_properties(
                         existing_items.get("properties", {}),
                         new_items.get("properties", {}),
@@ -153,7 +165,9 @@ class SchemaMerger:
                     merged_items = dict(existing_items)
                     merged_items["properties"] = merged_item_props
                     merged_def["items"] = merged_items
-                elif isinstance(existing_items, dict) and "properties" in existing_items:
+                elif (
+                    isinstance(existing_items, dict) and "properties" in existing_items
+                ):
                     # Existing has nested properties but new doesn't — keep existing (never destructive)
                     pass
                 elif isinstance(new_items, dict) and "properties" in new_items:
@@ -226,7 +240,7 @@ class SchemaMerger:
                 for ref in existing_main["oneOf"]:
                     ref_name = ref.get("$ref", "")
                     if ref_name.startswith(f"{topic_name}-"):
-                        event_type = ref_name[len(f"{topic_name}-"):]
+                        event_type = ref_name[len(f"{topic_name}-") :]
                         existing_event_types.add(event_type)
         except (json.JSONDecodeError, TypeError):
             pass
@@ -249,17 +263,16 @@ class SchemaMerger:
             elif existing_sub:
                 # Only in existing: preserve
                 result[key] = existing_sub
-                self.logger.info(f"Preserved existing sub-schema for event type '{event_type}'")
+                self.logger.info(
+                    f"Preserved existing sub-schema for event type '{event_type}'"
+                )
 
         # Build merged main schema with all event types
         merged_main = {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "title": topic_name,
             "description": f"Multi-event schema for {topic_name}",
-            "oneOf": [
-                {"$ref": f"{topic_name}-{et}"}
-                for et in sorted(all_event_types)
-            ],
+            "oneOf": [{"$ref": f"{topic_name}-{et}"} for et in sorted(all_event_types)],
         }
         result[topic_name] = json.dumps(merged_main, indent=2)
 
@@ -302,5 +315,7 @@ class SchemaMerger:
                 if "404" in error_str or "40401" in error_str:
                     self.logger.debug(f"No existing sub-schema for {subject}")
                 else:
-                    self.logger.warning(f"Failed to fetch sub-schema for {subject}: {e}")
+                    self.logger.warning(
+                        f"Failed to fetch sub-schema for {subject}: {e}"
+                    )
         return existing

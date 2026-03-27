@@ -19,10 +19,10 @@ from schema_infer.utils.performance import (
     time_operation,
 )
 
-
 # ---------------------------------------------------------------------------
 # TestPerformanceMonitor
 # ---------------------------------------------------------------------------
+
 
 class TestPerformanceMonitor:
     """Tests for PerformanceMonitor timing and statistics."""
@@ -84,6 +84,7 @@ class TestPerformanceMonitor:
 # TestTimeOperationDecorator
 # ---------------------------------------------------------------------------
 
+
 class TestTimeOperationDecorator:
     """Tests for the time_operation decorator."""
 
@@ -136,6 +137,7 @@ class TestTimeOperationDecorator:
 # ---------------------------------------------------------------------------
 # TestBatchProcessor
 # ---------------------------------------------------------------------------
+
 
 class TestBatchProcessor:
     """Tests for BatchProcessor sequential and parallel processing."""
@@ -213,6 +215,7 @@ class TestBatchProcessor:
 # TestMemoryManager
 # ---------------------------------------------------------------------------
 
+
 class TestMemoryManager:
     """Tests for MemoryManager memory checks and optimization."""
 
@@ -273,6 +276,7 @@ class TestMemoryManager:
 # ---------------------------------------------------------------------------
 # TestCacheManager
 # ---------------------------------------------------------------------------
+
 
 class TestCacheManager:
     """Tests for CacheManager set/get, expiry, eviction, and thread safety."""
@@ -377,6 +381,7 @@ class TestCacheManager:
 # ---------------------------------------------------------------------------
 # TestAsyncProcessor
 # ---------------------------------------------------------------------------
+
 
 class TestAsyncProcessor:
     """Tests for AsyncProcessor async item and batch processing."""

@@ -8,6 +8,6 @@ from .optimistic import OptimisticProcessor
 
 __all__ = [
     "main",
-    "AuthenticationManager", 
+    "AuthenticationManager",
     "OptimisticProcessor",
 ]

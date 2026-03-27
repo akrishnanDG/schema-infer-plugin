@@ -62,7 +62,9 @@ class StateStore:
         except Exception as e:
             raise LiveModeError(f"Failed to save state for {state.topic_name}: {e}")
 
-    def load(self, topic_name: str, config: Config) -> Optional["IncrementalSchemaState"]:
+    def load(
+        self, topic_name: str, config: Config
+    ) -> Optional["IncrementalSchemaState"]:
         """
         Load state from disk.
 

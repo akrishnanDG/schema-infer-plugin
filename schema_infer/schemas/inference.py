@@ -12,11 +12,11 @@ from ..utils.logger import get_logger
 
 class FieldType:
     """Represents a field type in the schema."""
-    
+
     def __init__(self, name: str, nullable: bool = False, array: bool = False):
         """
         Initialize field type.
-        
+
         Args:
             name: Type name (string, int, float, boolean, object, array, null)
             nullable: Whether the field can be null
@@ -25,7 +25,7 @@ class FieldType:
         self.name = name
         self.nullable = nullable
         self.array = array
-    
+
     def __str__(self) -> str:
         """String representation of the type."""
         result = self.name
@@ -34,15 +34,17 @@ class FieldType:
         if self.nullable:
             result = f"nullable<{result}>"
         return result
-    
+
     def __eq__(self, other) -> bool:
         """Check equality with another FieldType."""
         if not isinstance(other, FieldType):
             return False
-        return (self.name == other.name and 
-                self.nullable == other.nullable and 
-                self.array == other.array)
-    
+        return (
+            self.name == other.name
+            and self.nullable == other.nullable
+            and self.array == other.array
+        )
+
     def __hash__(self) -> int:
         """Hash for use in sets and dictionaries."""
         return hash((self.name, self.nullable, self.array))
@@ -50,19 +52,19 @@ class FieldType:
 
 class SchemaField:
     """Represents a field in the schema."""
-    
+
     def __init__(
-        self, 
-        name: str, 
-        field_type: FieldType, 
+        self,
+        name: str,
+        field_type: FieldType,
         required: bool = True,
         default_value: Optional[Any] = None,
         description: Optional[str] = None,
-        examples: Optional[List[Any]] = None
+        examples: Optional[List[Any]] = None,
     ):
         """
         Initialize schema field.
-        
+
         Args:
             name: Field name
             field_type: Field type
@@ -77,7 +79,7 @@ class SchemaField:
         self.default_value = default_value
         self.description = description
         self.examples = examples or []
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert field to dictionary representation."""
         return {
@@ -92,17 +94,17 @@ class SchemaField:
 
 class InferredSchema:
     """Represents an inferred schema."""
-    
+
     def __init__(
-        self, 
-        name: str, 
+        self,
+        name: str,
         fields: List[SchemaField],
         description: Optional[str] = None,
-        namespace: Optional[str] = None
+        namespace: Optional[str] = None,
     ):
         """
         Initialize inferred schema.
-        
+
         Args:
             name: Schema name
             fields: List of schema fields
@@ -113,7 +115,7 @@ class InferredSchema:
         self.fields = fields
         self.description = description
         self.namespace = namespace
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert schema to dictionary representation."""
         return {
@@ -126,17 +128,17 @@ class InferredSchema:
 
 class SchemaInferrer:
     """Infers schemas from parsed data."""
-    
+
     def __init__(
         self,
         confidence_threshold: float = 0.8,
         max_depth: int = 20,
         array_handling: str = "union",
-        null_handling: str = "optional"
+        null_handling: str = "optional",
     ):
         """
         Initialize schema inferrer.
-        
+
         Args:
             confidence_threshold: Minimum confidence for field type inference
             max_depth: Maximum nesting depth for objects
@@ -151,54 +153,60 @@ class SchemaInferrer:
 
     # Datetime patterns (ISO 8601 / RFC 3339 and common formats)
     _DATETIME_PATTERNS = [
-        re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?'),  # ISO 8601 with optional tz
-        re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?'),   # Space-separated with optional tz
-        re.compile(r'^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}'),    # 12/01/2025 10:00:00
-        re.compile(r'^\d{2}-\d{2}-\d{4} \d{2}:\d{2}:\d{2}'),    # 01-12-2025 10:00:00
+        re.compile(
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?"
+        ),  # ISO 8601 with optional tz
+        re.compile(
+            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?"
+        ),  # Space-separated with optional tz
+        re.compile(r"^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}"),  # 12/01/2025 10:00:00
+        re.compile(r"^\d{2}-\d{2}-\d{4} \d{2}:\d{2}:\d{2}"),  # 01-12-2025 10:00:00
     ]
     _DATE_PATTERNS = [
-        re.compile(r'^\d{4}-\d{2}-\d{2}$'),                      # 2025-12-01
-        re.compile(r'^\d{2}/\d{2}/\d{4}$'),                      # 12/01/2025
-        re.compile(r'^\d{2}-\d{2}-\d{4}$'),                      # 01-12-2025
+        re.compile(r"^\d{4}-\d{2}-\d{2}$"),  # 2025-12-01
+        re.compile(r"^\d{2}/\d{2}/\d{4}$"),  # 12/01/2025
+        re.compile(r"^\d{2}-\d{2}-\d{4}$"),  # 01-12-2025
     ]
 
-    def infer_schema(self, parsed_data: List[Dict[str, Any]], schema_name: str) -> InferredSchema:
+    def infer_schema(
+        self, parsed_data: List[Dict[str, Any]], schema_name: str
+    ) -> InferredSchema:
         """
         Infer schema from parsed data.
-        
+
         Args:
             parsed_data: List of parsed data dictionaries
             schema_name: Name for the schema
-            
+
         Returns:
             Inferred schema
         """
-        
+
         if not parsed_data:
             raise ValueError("No data provided for schema inference")
-        
+
         self.logger.info(f"Inferring schema for {len(parsed_data)} records")
-        
+
         # Analyze all records to determine field types
         field_analysis = self._analyze_fields(parsed_data)
-        
+
         # Create schema fields
         fields = []
         for field_name, analysis in field_analysis.items():
             field = self._create_schema_field(field_name, analysis)
             if field:
                 fields.append(field)
-        
+
         # Sort fields by name for consistency
         fields.sort(key=lambda f: f.name)
-        
+
         return InferredSchema(
             name=schema_name,
             fields=fields,
             description=f"Auto-generated schema for {schema_name}",
-            namespace="com.schema-infer.schema.infer"
+            namespace="com.schema-infer.schema.infer",
         )
-    
+
     def detect_discriminator(self, parsed_data: List[Dict[str, Any]]) -> Optional[str]:
         """
         Auto-detect a discriminator field that separates event types.
@@ -216,7 +224,18 @@ class SchemaInferrer:
             return None
 
         # Well-known discriminator field names (higher priority)
-        priority_names = {"event_type", "type", "eventType", "__type", "action", "kind", "event", "record_type", "message_type", "category"}
+        priority_names = {
+            "event_type",
+            "type",
+            "eventType",
+            "__type",
+            "action",
+            "kind",
+            "event",
+            "record_type",
+            "message_type",
+            "category",
+        }
 
         candidates = []
         total_records = len(parsed_data)
@@ -245,12 +264,20 @@ class SchemaInferrer:
 
             # Criteria: present in >90% of records, string type, 2-20 unique values,
             # and cardinality is much less than record count (not a high-cardinality ID field)
-            if (presence_ratio >= 0.9
-                    and 2 <= cardinality <= 20
-                    and cardinality < total_records * 0.3):
+            if (
+                presence_ratio >= 0.9
+                and 2 <= cardinality <= 20
+                and cardinality < total_records * 0.3
+            ):
                 # Score: heavily prioritize known names, then presence ratio, then lower cardinality
-                is_priority = field_name in priority_names or field_name.lower() in priority_names
-                score = (100 if is_priority else 0) + (presence_ratio * 10) + (1.0 / cardinality)
+                is_priority = (
+                    field_name in priority_names or field_name.lower() in priority_names
+                )
+                score = (
+                    (100 if is_priority else 0)
+                    + (presence_ratio * 10)
+                    + (1.0 / cardinality)
+                )
                 candidates.append((field_name, score, cardinality, unique_values))
 
         if not candidates:
@@ -301,7 +328,7 @@ class SchemaInferrer:
         parsed_data: List[Dict[str, Any]],
         discriminator_field: str,
         schema_name: str,
-    ) -> Dict[str, 'InferredSchema']:
+    ) -> Dict[str, "InferredSchema"]:
         """
         Infer separate schemas per event type based on a discriminator field.
 
@@ -341,7 +368,9 @@ class SchemaInferrer:
 
         return event_schemas
 
-    def analyze_fields(self, parsed_data: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def analyze_fields(
+        self, parsed_data: List[Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Analyze fields across all records.
 
@@ -355,7 +384,9 @@ class SchemaInferrer:
         """
         return self._analyze_fields(parsed_data)
 
-    def create_schema_field(self, field_name: str, analysis: Dict[str, Any]) -> Optional[SchemaField]:
+    def create_schema_field(
+        self, field_name: str, analysis: Dict[str, Any]
+    ) -> Optional[SchemaField]:
         """
         Create a schema field from analysis data.
 
@@ -370,57 +401,63 @@ class SchemaInferrer:
         """
         return self._create_schema_field(field_name, analysis)
 
-    def _analyze_fields(self, parsed_data: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def _analyze_fields(
+        self, parsed_data: List[Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Analyze fields across all records.
-        
+
         Args:
             parsed_data: List of parsed data dictionaries
-            
+
         Returns:
             Dictionary mapping field names to their analysis
         """
-        
-        field_analysis = defaultdict(lambda: {
-            "types": Counter(),
-            "values": [],
-            "null_count": 0,
-            "total_count": 0,
-            "examples": set(),
-        })
-        
+
+        field_analysis = defaultdict(
+            lambda: {
+                "types": Counter(),
+                "values": [],
+                "null_count": 0,
+                "total_count": 0,
+                "examples": set(),
+            }
+        )
+
         for record in parsed_data:
             self._analyze_record(record, field_analysis, depth=0)
-        
+
         return dict(field_analysis)
-    
+
     def _analyze_record(
-        self, 
-        record: Dict[str, Any], 
-        field_analysis: Dict[str, Dict[str, Any]], 
+        self,
+        record: Dict[str, Any],
+        field_analysis: Dict[str, Dict[str, Any]],
         depth: int,
-        field_prefix: str = ""
+        field_prefix: str = "",
     ) -> None:
         """
         Analyze a single record.
-        
+
         Args:
             record: Record to analyze
             field_analysis: Field analysis accumulator
             depth: Current nesting depth
             field_prefix: Prefix for nested field names
         """
-        
+
         if depth > self.max_depth:
-            self.logger.warning(f"Maximum depth {self.max_depth} reached, truncating analysis")
+            self.logger.warning(
+                f"Maximum depth {self.max_depth} reached, truncating analysis"
+            )
             return
-        
+
         for key, value in record.items():
             # Create full field name with prefix for nested fields
             full_field_name = f"{field_prefix}.{key}" if field_prefix else key
             analysis = field_analysis[full_field_name]
             analysis["total_count"] += 1
-            
+
             if value is None:
                 analysis["null_count"] += 1
                 analysis["types"]["null"] += 1
@@ -429,37 +466,46 @@ class SchemaInferrer:
                 value_type = self._get_value_type(value, depth)
                 analysis["types"][str(value_type)] += 1
                 analysis["values"].append(value)
-                
+
                 # Collect examples (limit to 5)
                 if len(analysis["examples"]) < 5:
                     analysis["examples"].add(self._get_example_value(value))
-                
+
                 # Recursively analyze nested objects
                 if isinstance(value, dict) and depth < self.max_depth:
-                    self._analyze_record(value, field_analysis, depth + 1, full_field_name)
+                    self._analyze_record(
+                        value, field_analysis, depth + 1, full_field_name
+                    )
                 elif isinstance(value, list) and depth < self.max_depth:
                     # Analyze array elements for nested objects
                     for item in value:
                         if isinstance(item, dict):
-                            self._analyze_record(item, field_analysis, depth + 1, f"{full_field_name}[]")
+                            self._analyze_record(
+                                item, field_analysis, depth + 1, f"{full_field_name}[]"
+                            )
                         elif isinstance(item, list):
                             # Handle nested arrays
                             for nested_item in item:
                                 if isinstance(nested_item, dict):
-                                    self._analyze_record(nested_item, field_analysis, depth + 1, f"{full_field_name}[][]")
-    
+                                    self._analyze_record(
+                                        nested_item,
+                                        field_analysis,
+                                        depth + 1,
+                                        f"{full_field_name}[][]",
+                                    )
+
     def _get_value_type(self, value: Any, depth: int) -> FieldType:
         """
         Get the type of a value.
-        
+
         Args:
             value: Value to analyze
             depth: Current nesting depth
-            
+
         Returns:
             FieldType representing the value's type
         """
-        
+
         if isinstance(value, bool):
             return FieldType("boolean")
         elif isinstance(value, (int, float)):
@@ -497,26 +543,26 @@ class SchemaInferrer:
                     return FieldType(list(unique_types)[0], array=True)
                 else:
                     return FieldType("union", array=True)
-        
+
         elif isinstance(value, dict):
             if depth >= self.max_depth:
                 return FieldType("string")  # Truncate deep objects
             return FieldType("object")
-        
+
         else:
             return FieldType("string")  # Default fallback
-    
+
     def _get_example_value(self, value: Any) -> Any:
         """
         Get an example value for documentation.
-        
+
         Args:
             value: Value to convert to example
-            
+
         Returns:
             Example value suitable for documentation
         """
-        
+
         if isinstance(value, (str, int, float, bool)):
             return value
         elif isinstance(value, list):
@@ -527,33 +573,35 @@ class SchemaInferrer:
             return str(dict(list(value.items())[:3]))
         else:
             return str(value)
-    
-    def _create_schema_field(self, field_name: str, analysis: Dict[str, Any]) -> Optional[SchemaField]:
+
+    def _create_schema_field(
+        self, field_name: str, analysis: Dict[str, Any]
+    ) -> Optional[SchemaField]:
         """
         Create a schema field from analysis.
-        
+
         Args:
             field_name: Name of the field
             analysis: Field analysis data
-            
+
         Returns:
             SchemaField or None if field should be excluded
         """
-        
+
         total_count = analysis["total_count"]
         null_count = analysis["null_count"]
         type_counts = analysis["types"]
-        
+
         if total_count == 0:
             return None
-        
+
         # All inferred fields are nullable -- a sample can never guarantee
         # a field won't be null in future data
         nullable = True
-        
+
         # Determine the primary type
         non_null_types = {k: v for k, v in type_counts.items() if k != "null"}
-        
+
         if not non_null_types:
             # All values are null
             field_type = FieldType("string", nullable=True)
@@ -561,10 +609,10 @@ class SchemaInferrer:
             # Find the most common non-null type
             most_common_type = max(non_null_types.items(), key=lambda x: x[1])
             type_name = most_common_type[0]
-            
+
             # Calculate confidence
             confidence = most_common_type[1] / (total_count - null_count)
-            
+
             if confidence < self.confidence_threshold:
                 # Low confidence, use union type
                 all_types = list(non_null_types.keys())
@@ -572,7 +620,7 @@ class SchemaInferrer:
                     type_name = all_types[0]
                 else:
                     type_name = "union"
-            
+
             # Parse array type wrapper
             is_array = False
             base_type_name = type_name
@@ -582,27 +630,31 @@ class SchemaInferrer:
 
             # Detect enum types: string fields with limited distinct values
             if base_type_name == "string" and not is_array:
-                string_examples = [ex for ex in analysis.get("examples", set()) if isinstance(ex, str)]
+                string_examples = [
+                    ex for ex in analysis.get("examples", set()) if isinstance(ex, str)
+                ]
                 non_null_count = total_count - null_count
-                if (2 <= len(string_examples) <= 10
-                        and non_null_count >= 3
-                        and len(string_examples) < non_null_count * 0.5):
+                if (
+                    2 <= len(string_examples) <= 10
+                    and non_null_count >= 3
+                    and len(string_examples) < non_null_count * 0.5
+                ):
                     base_type_name = "enum"
 
             field_type = FieldType(base_type_name, nullable=nullable, array=is_array)
-        
+
         # All inferred fields are optional -- a sample of messages can never
         # guarantee a field is truly required in all future data
         required = False
         nullable = True
-        
+
         # Get examples
         examples = list(analysis["examples"])[:3]
-        
+
         return SchemaField(
             name=field_name,
             field_type=field_type,
             required=required,
             examples=examples,
-            description=f"Field {field_name} with type {field_type}"
+            description=f"Field {field_name} with type {field_type}",
         )

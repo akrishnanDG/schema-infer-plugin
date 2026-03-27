@@ -8,7 +8,7 @@ from .parsers import JSONParser, CSVParser, KeyValueParser, TSVParser, BaseParse
 __all__ = [
     "FormatDetector",
     "JSONParser",
-    "CSVParser", 
+    "CSVParser",
     "KeyValueParser",
     "TSVParser",
     "BaseParser",

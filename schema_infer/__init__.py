@@ -16,11 +16,11 @@ from .schemas.generators import AvroGenerator, ProtobufGenerator, JSONSchemaGene
 
 __all__ = [
     "SchemaInferrer",
-    "KafkaConsumer", 
+    "KafkaConsumer",
     "SchemaRegistry",
     "FormatDetector",
     "JSONParser",
-    "CSVParser", 
+    "CSVParser",
     "KeyValueParser",
     "AvroGenerator",
     "ProtobufGenerator",

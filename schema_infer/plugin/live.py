@@ -98,12 +98,20 @@ class LiveModeOrchestrator:
         self._states: Dict[str, IncrementalSchemaState] = {}
         self._states_lock = threading.Lock()
         self._topic_formats: Dict[str, str] = {}  # Cached detected format per topic
-        self._topic_discriminators: Dict[str, Optional[str]] = {}  # Cached discriminator per topic
-        self._disc_record_buffer: Dict[str, List[Dict[str, Any]]] = {}  # Buffered records for disc detection
-        self._topic_flat_registered: Set[str] = set()  # Topics with flat schemas already in SR
+        self._topic_discriminators: Dict[str, Optional[str]] = (
+            {}
+        )  # Cached discriminator per topic
+        self._disc_record_buffer: Dict[str, List[Dict[str, Any]]] = (
+            {}
+        )  # Buffered records for disc detection
+        self._topic_flat_registered: Set[str] = (
+            set()
+        )  # Topics with flat schemas already in SR
         self._topic_event_types: Dict[str, Set[str]] = {}  # Known event types per topic
         self._topic_last_activity: Dict[str, float] = {}
-        self._topic_partitions: Dict[str, Set[int]] = {}  # Partition IDs owned per topic
+        self._topic_partitions: Dict[str, Set[int]] = (
+            {}
+        )  # Partition IDs owned per topic
         # Lock for topic metadata dicts (fast dict ops only — never hold during I/O).
         # Lock ordering: always acquire _states_lock before _metadata_lock if both needed.
         self._metadata_lock = threading.Lock()
@@ -127,7 +135,9 @@ class LiveModeOrchestrator:
         effective_state_dir = state_dir or Path(
             config.live.state_dir or "~/.schema-infer/state"
         )
-        self.state_store = StateStore(effective_state_dir) if config.live.persist_state else None
+        self.state_store = (
+            StateStore(effective_state_dir) if config.live.persist_state else None
+        )
 
         # Registry
         self.registry = SchemaRegistry(config) if register else None
@@ -250,7 +260,9 @@ class LiveModeOrchestrator:
             self._persist_all_dirty_states()
             self._print_shutdown_summary()
 
-    def _on_topics_assigned(self, topics: Set[str], partition_map: Dict[str, Set[int]]) -> None:
+    def _on_topics_assigned(
+        self, topics: Set[str], partition_map: Dict[str, Set[int]]
+    ) -> None:
         """
         Called when Kafka assigns new topic partitions to this instance.
 
@@ -280,7 +292,9 @@ class LiveModeOrchestrator:
                 f"newly assigned topics"
             )
 
-    def _on_topics_revoked(self, topics: Set[str], partition_map: Dict[str, Set[int]]) -> None:
+    def _on_topics_revoked(
+        self, topics: Set[str], partition_map: Dict[str, Set[int]]
+    ) -> None:
         """
         Called when Kafka revokes topic partitions from this instance.
 
@@ -351,6 +365,7 @@ class LiveModeOrchestrator:
         self._last_discovery_time = now
         try:
             from ..core.discovery import TopicDiscovery
+
             discovery = TopicDiscovery(self.config)
             current_topics = discovery.discover_topics(**self._topic_discovery_kwargs)
             new_topics = set(current_topics) - set(self.topics)
@@ -439,12 +454,15 @@ class LiveModeOrchestrator:
 
             if cached_disc is _SENTINEL or cached_disc is None:
                 from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
+
                 analyzer = SchemaAnalyzer(
                     confidence_threshold=self.config.inference.confidence_threshold,
                     max_depth=self.config.inference.max_depth,
                 )
                 with self._metadata_lock:
-                    check_records = list(self._disc_record_buffer.get(topic_name, parsed_records))
+                    check_records = list(
+                        self._disc_record_buffer.get(topic_name, parsed_records)
+                    )
                 disc = analyzer.detect_discriminator(check_records)
                 with self._metadata_lock:
                     self._topic_discriminators[topic_name] = disc
@@ -452,7 +470,9 @@ class LiveModeOrchestrator:
                         self._topic_event_types[topic_name] = set()
                         self._disc_record_buffer.pop(topic_name, None)
                 if disc:
-                    click.echo(f"[{_ts()}] {topic_name}: Detected discriminator field '{disc}'")
+                    click.echo(
+                        f"[{_ts()}] {topic_name}: Detected discriminator field '{disc}'"
+                    )
 
             with self._metadata_lock:
                 discriminator = self._topic_discriminators.get(topic_name)
@@ -578,7 +598,11 @@ class LiveModeOrchestrator:
             self._topic_event_types[topic_name] = current_types | known_types
 
         # Register if changes detected or new event type appeared (partition-0 owner only)
-        if (any_changes or new_event_type_discovered) and self.register and self.registry:
+        if (
+            (any_changes or new_event_type_discovered)
+            and self.register
+            and self.registry
+        ):
             if self._owns_partition_zero(topic_name):
                 self._handle_multi_event_registration(topic_name, discriminator)
             else:
@@ -637,28 +661,33 @@ class LiveModeOrchestrator:
             existing_main = self.registry.get_latest_schema(main_subject)
             if existing_main and "schema" in existing_main:
                 import json
+
                 existing_et = set()
                 try:
                     em = json.loads(existing_main["schema"])
                     for ref in em.get("oneOf", []):
                         rn = ref.get("$ref", "")
                         if rn.startswith(f"{topic_name}-"):
-                            existing_et.add(rn[len(f"{topic_name}-"):])
+                            existing_et.add(rn[len(f"{topic_name}-") :])
                 except Exception:
                     pass
 
                 existing_sub = merger.fetch_existing_sub_schemas(
-                    self.registry, topic_name,
-                    list(set(event_types) | existing_et)
+                    self.registry, topic_name, list(set(event_types) | existing_et)
                 )
                 merged = merger.merge_multi_event_schemas(
-                    existing_main["schema"], sub_contents,
-                    main_content, topic_name, existing_sub
+                    existing_main["schema"],
+                    sub_contents,
+                    main_content,
+                    topic_name,
+                    existing_sub,
                 )
                 main_content = merged[topic_name]
                 sub_contents = {
                     et: merged[f"{topic_name}.{et}"]
-                    for et in sorted(set(sub_contents.keys()) | set(existing_sub.keys()))
+                    for et in sorted(
+                        set(sub_contents.keys()) | set(existing_sub.keys())
+                    )
                     if f"{topic_name}.{et}" in merged
                 }
         except Exception:
@@ -681,32 +710,47 @@ class LiveModeOrchestrator:
                 existing = self.registry.get_latest_schema(main_subject)
                 if existing and "schema" in existing:
                     import json as _json
+
                     existing_schema = _json.loads(existing["schema"])
                     if "oneOf" in existing_schema:
                         was_flat_registered = False
                         with self._metadata_lock:
                             self._topic_flat_registered.discard(topic_name)
-                        click.echo(f"[{_ts()}] {topic_name}: Already transitioned to oneOf by another instance")
+                        click.echo(
+                            f"[{_ts()}] {topic_name}: Already transitioned to oneOf by another instance"
+                        )
             except Exception:
                 pass
 
         if was_flat_registered:
             try:
                 config_resp = self.registry.get_config(subject=main_subject)
-                previous_compat = config_resp.get("compatibilityLevel", self.config.schema_registry.compatibility)
+                previous_compat = config_resp.get(
+                    "compatibilityLevel", self.config.schema_registry.compatibility
+                )
             except Exception:
                 previous_compat = self.config.schema_registry.compatibility
             try:
-                self.registry.set_config({"compatibility": "NONE"}, subject=main_subject)
-                click.echo(f"[{_ts()}] {topic_name}: Transitioning from flat to multi-event, temporarily set compatibility to NONE")
+                self.registry.set_config(
+                    {"compatibility": "NONE"}, subject=main_subject
+                )
+                click.echo(
+                    f"[{_ts()}] {topic_name}: Transitioning from flat to multi-event, temporarily set compatibility to NONE"
+                )
             except Exception as e:
-                click.echo(f"[{_ts()}] {topic_name}: Failed to set compatibility for transition: {e}", err=True)
+                click.echo(
+                    f"[{_ts()}] {topic_name}: Failed to set compatibility for transition: {e}",
+                    err=True,
+                )
 
         # Register (with semaphore for rate limiting)
         with self._registration_semaphore:
             try:
                 reg_result = self.registry.register_multi_event_schemas(
-                    topic_name, sub_contents, main_content, self.schema_format,
+                    topic_name,
+                    sub_contents,
+                    main_content,
+                    self.schema_format,
                     skip_compatibility_set=was_flat_registered,
                 )
                 with self._stats_lock:
@@ -724,8 +768,12 @@ class LiveModeOrchestrator:
                 # Always restore compatibility after transition attempt
                 if previous_compat is not None:
                     try:
-                        self.registry.set_config({"compatibility": previous_compat}, subject=main_subject)
-                        click.echo(f"[{_ts()}] {topic_name}: Restored compatibility to {previous_compat}")
+                        self.registry.set_config(
+                            {"compatibility": previous_compat}, subject=main_subject
+                        )
+                        click.echo(
+                            f"[{_ts()}] {topic_name}: Restored compatibility to {previous_compat}"
+                        )
                     except Exception:
                         self.logger.warning(
                             f"{topic_name}: Failed to restore compatibility to {previous_compat}"
@@ -852,7 +900,10 @@ class LiveModeOrchestrator:
         if self.schema_format == "json-schema":
             try:
                 from ..core.merger import SchemaMerger
-                subject = self.registry._generate_subject_name(topic_name, self.schema_format)
+
+                subject = self.registry._generate_subject_name(
+                    topic_name, self.schema_format
+                )
                 existing = self.registry.get_latest_schema(subject)
                 if existing and "schema" in existing:
                     merger = SchemaMerger()
@@ -907,9 +958,7 @@ class LiveModeOrchestrator:
                         f"(use --on-incompatible=force to override)"
                     )
                     if self.on_incompatible == "log" and self.output_dir:
-                        self._write_incompatible_schema(
-                            topic_name, schema_content
-                        )
+                        self._write_incompatible_schema(topic_name, schema_content)
                     return
                 elif self.on_incompatible == "force":
                     click.echo(
@@ -920,7 +969,9 @@ class LiveModeOrchestrator:
                     try:
                         self.registry._set_subject_compatibility(subject, "NONE")
                         schema_id = self.registry.register_schema(
-                            topic_name, schema_content, self.schema_format,
+                            topic_name,
+                            schema_content,
+                            self.schema_format,
                             skip_compatibility_set=True,
                         )
                         click.echo(
@@ -935,7 +986,9 @@ class LiveModeOrchestrator:
                         )
                     finally:
                         try:
-                            self.registry._set_subject_compatibility(subject, original_compat)
+                            self.registry._set_subject_compatibility(
+                                subject, original_compat
+                            )
                         except Exception:
                             self.logger.warning(
                                 f"{topic_name}: Failed to restore subject compatibility to {original_compat}"
@@ -971,7 +1024,12 @@ class LiveModeOrchestrator:
 
         inferrer = SchemaInferrer(self.config)
         schema_dict = schema.to_dict()
-        schema_dict["_metadata"] = {"format": "json", "message_count": 0, "parsed_count": 0, "confidence": 1.0}
+        schema_dict["_metadata"] = {
+            "format": "json",
+            "message_count": 0,
+            "parsed_count": 0,
+            "confidence": 1.0,
+        }
 
         try:
             schema_content = inferrer.generate_schema(schema_dict, self.schema_format)
@@ -983,16 +1041,16 @@ class LiveModeOrchestrator:
         except Exception as e:
             self.logger.warning(f"Failed to write schema file for {topic_name}: {e}")
 
-    def _write_incompatible_schema(
-        self, topic_name: str, schema_content: str
-    ) -> None:
+    def _write_incompatible_schema(self, topic_name: str, schema_content: str) -> None:
         """Write incompatible schema for manual review."""
         extensions = {"avro": "avsc", "protobuf": "proto", "json-schema": "json"}
         ext = extensions.get(self.schema_format, self.schema_format)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         schema_file = self.output_dir / f"{topic_name}.incompatible.{ext}"
         schema_file.write_text(schema_content)
-        click.echo(f"[{_ts()}] {topic_name}: Incompatible schema written to {schema_file}")
+        click.echo(
+            f"[{_ts()}] {topic_name}: Incompatible schema written to {schema_file}"
+        )
 
     def _get_or_create_state(self, topic_name: str) -> IncrementalSchemaState:
         """Get existing state or create/load a new one.
@@ -1067,9 +1125,7 @@ class LiveModeOrchestrator:
                     state.dirty = False
                 dirty_count += 1
             except Exception as e:
-                self.logger.warning(
-                    f"Failed to persist state for {topic_name}: {e}"
-                )
+                self.logger.warning(f"Failed to persist state for {topic_name}: {e}")
 
         if dirty_count > 0:
             click.echo(f"  Persisting state for {dirty_count} topics... done")

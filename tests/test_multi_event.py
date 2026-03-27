@@ -13,21 +13,42 @@ from schema_infer.core.merger import SchemaMerger
 from schema_infer.core.incremental import IncrementalSchemaState
 from schema_infer.config import Config
 
-
 # ---------------------------------------------------------------------------
 # Test data fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def multi_event_records():
     """Records with clear discriminator field and different schemas per type."""
     records = []
     for i in range(10):
-        records.append({"event_type": "user_created", "user_id": f"u{i}", "name": f"User{i}", "email": f"u{i}@test.com"})
+        records.append(
+            {
+                "event_type": "user_created",
+                "user_id": f"u{i}",
+                "name": f"User{i}",
+                "email": f"u{i}@test.com",
+            }
+        )
     for i in range(8):
-        records.append({"event_type": "payment", "payment_id": f"p{i}", "amount": 10.0 + i, "currency": "USD"})
+        records.append(
+            {
+                "event_type": "payment",
+                "payment_id": f"p{i}",
+                "amount": 10.0 + i,
+                "currency": "USD",
+            }
+        )
     for i in range(7):
-        records.append({"event_type": "order_placed", "order_id": f"o{i}", "total": 100.0 + i, "items": i + 1})
+        records.append(
+            {
+                "event_type": "order_placed",
+                "order_id": f"o{i}",
+                "total": 100.0 + i,
+                "items": i + 1,
+            }
+        )
     return records
 
 
@@ -57,6 +78,7 @@ def config():
 # detect_discriminator tests
 # ---------------------------------------------------------------------------
 
+
 class TestDetectDiscriminator:
     def test_detects_event_type_field(self, inferrer, multi_event_records):
         """Should detect event_type as discriminator."""
@@ -81,9 +103,11 @@ class TestDetectDiscriminator:
     def test_returns_none_for_high_cardinality(self, inferrer):
         """Should reject fields with too many unique values (IDs)."""
         records = [
-            {"event_type": "a", "id": f"id-{i}", "data": i}
-            if i < 5 else
-            {"event_type": "b", "id": f"id-{i}", "other": i}
+            (
+                {"event_type": "a", "id": f"id-{i}", "data": i}
+                if i < 5
+                else {"event_type": "b", "id": f"id-{i}", "other": i}
+            )
             for i in range(10)
         ]
         disc = inferrer.detect_discriminator(records)
@@ -116,6 +140,7 @@ class TestDetectDiscriminator:
 # ---------------------------------------------------------------------------
 # infer_multi_event_schemas tests
 # ---------------------------------------------------------------------------
+
 
 class TestInferMultiEventSchemas:
     def test_groups_by_discriminator(self, inferrer, multi_event_records):
@@ -154,6 +179,7 @@ class TestInferMultiEventSchemas:
 # ---------------------------------------------------------------------------
 # JSONSchemaGenerator.generate_multi_event tests
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateMultiEvent:
     def test_generates_main_and_sub_schemas(self, inferrer, multi_event_records):
@@ -206,55 +232,64 @@ class TestGenerateMultiEvent:
 # SchemaMerger tests
 # ---------------------------------------------------------------------------
 
+
 class TestSchemaMerger:
     def test_merge_flat_adds_new_fields(self):
         """Merge should add fields from new schema."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {"b": {"type": "integer"}, "c": {"type": "number"}},
-            "required": [],
-            "additionalProperties": False
-        })
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"b": {"type": "integer"}, "c": {"type": "number"}},
+                "required": [],
+                "additionalProperties": False,
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         assert set(merged["properties"].keys()) == {"a", "b", "c"}
 
     def test_merge_flat_preserves_existing_fields(self):
         """Fields only in existing should be preserved."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {"b": {"type": "integer"}},
-            "required": [],
-            "additionalProperties": False
-        })
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"b": {"type": "integer"}},
+                "required": [],
+                "additionalProperties": False,
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         assert "a" in merged["properties"]
 
     def test_merge_flat_preserves_existing_type_on_conflict(self):
         """Existing type should be preserved when types differ (avoid compat errors)."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}},
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "integer"}},
-            "required": [],
-            "additionalProperties": False
-        })
+        existing = json.dumps(
+            {"type": "object", "properties": {"a": {"type": "string"}}, "required": []}
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "integer"}},
+                "required": [],
+                "additionalProperties": False,
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         # Type conflict now widens to union instead of silently keeping existing
         assert merged["properties"]["a"]["type"] == ["string", "integer", "null"]
@@ -263,18 +298,18 @@ class TestSchemaMerger:
         """Should preserve additionalProperties from existing schema."""
         merger = SchemaMerger()
         # Existing has no additionalProperties (open model)
-        existing = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}},
-            "required": []
-        })
+        existing = json.dumps(
+            {"type": "object", "properties": {"a": {"type": "string"}}, "required": []}
+        )
         # New has additionalProperties: false
-        new = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
-            "required": [],
-            "additionalProperties": False
-        })
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
+                "required": [],
+                "additionalProperties": False,
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         # Should NOT have additionalProperties since existing didn't have it
         assert "additionalProperties" not in merged
@@ -282,25 +317,31 @@ class TestSchemaMerger:
     def test_merge_flat_preserves_closed_model(self):
         """Should preserve additionalProperties: false from existing."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}},
-            "required": [],
-            "additionalProperties": False
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
-            "required": [],
-            "additionalProperties": False
-        })
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}},
+                "required": [],
+                "additionalProperties": False,
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
+                "required": [],
+                "additionalProperties": False,
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         assert merged["additionalProperties"] is False
 
     def test_merge_flat_handles_invalid_existing(self):
         """Should merge new fields into empty base when existing can't be parsed."""
         merger = SchemaMerger()
-        new_json = json.dumps({"type": "object", "properties": {"a": {"type": "string"}}})
+        new_json = json.dumps(
+            {"type": "object", "properties": {"a": {"type": "string"}}}
+        )
         result = merger.merge_flat_schemas("invalid json", new_json)
         merged = json.loads(result)
         # With invalid existing, merger starts from empty and merges new fields in
@@ -311,26 +352,36 @@ class TestSchemaMerger:
         """Should not merge flat into an existing oneOf schema."""
         merger = SchemaMerger()
         existing = json.dumps({"oneOf": [{"$ref": "sub-a"}]})
-        new_json = json.dumps({"type": "object", "properties": {"a": {"type": "string"}}})
+        new_json = json.dumps(
+            {"type": "object", "properties": {"a": {"type": "string"}}}
+        )
         result = merger.merge_flat_schemas(existing, new_json)
         assert result == new_json
 
     def test_merge_multi_event_preserves_existing_types(self):
         """Should preserve event types from existing that aren't in new."""
         merger = SchemaMerger()
-        existing_main = json.dumps({
-            "oneOf": [
-                {"$ref": "topic-type_a"},
-                {"$ref": "topic-type_b"},
-            ]
-        })
+        existing_main = json.dumps(
+            {
+                "oneOf": [
+                    {"$ref": "topic-type_a"},
+                    {"$ref": "topic-type_b"},
+                ]
+            }
+        )
         new_schemas = {
-            "type_a": json.dumps({"type": "object", "properties": {"f1": {"type": "string"}}})
+            "type_a": json.dumps(
+                {"type": "object", "properties": {"f1": {"type": "string"}}}
+            )
         }
         new_main = json.dumps({"oneOf": [{"$ref": "topic-type_a"}]})
         existing_subs = {
-            "type_a": json.dumps({"type": "object", "properties": {"f1": {"type": "string"}}}),
-            "type_b": json.dumps({"type": "object", "properties": {"f2": {"type": "integer"}}}),
+            "type_a": json.dumps(
+                {"type": "object", "properties": {"f1": {"type": "string"}}}
+            ),
+            "type_b": json.dumps(
+                {"type": "object", "properties": {"f2": {"type": "integer"}}}
+            ),
         }
 
         result = merger.merge_multi_event_schemas(
@@ -348,17 +399,20 @@ class TestSchemaMerger:
 # IncrementalSchemaState.seed_from_json_schema tests
 # ---------------------------------------------------------------------------
 
+
 class TestSeedFromJsonSchema:
     def test_seeds_fields_from_schema(self, config):
         """Should populate field_analysis from schema properties."""
-        schema = json.dumps({
-            "type": "object",
-            "properties": {
-                "name": {"type": ["string", "null"]},
-                "age": {"type": ["integer", "null"]},
-                "active": {"type": "boolean"},
+        schema = json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": ["string", "null"]},
+                    "age": {"type": ["integer", "null"]},
+                    "active": {"type": "boolean"},
+                },
             }
-        })
+        )
         state = IncrementalSchemaState.seed_from_json_schema("test", schema, config)
         assert "name" in state.field_analysis
         assert "age" in state.field_analysis
@@ -367,12 +421,14 @@ class TestSeedFromJsonSchema:
 
     def test_seeded_state_type_detection(self, config):
         """Seeded fields should have correct type counts."""
-        schema = json.dumps({
-            "type": "object",
-            "properties": {
-                "count": {"type": ["integer", "null"]},
+        schema = json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "count": {"type": ["integer", "null"]},
+                },
             }
-        })
+        )
         state = IncrementalSchemaState.seed_from_json_schema("test", schema, config)
         assert "integer" in state.field_analysis["count"]["types"]
 
@@ -389,10 +445,9 @@ class TestSeedFromJsonSchema:
 
     def test_seeded_state_can_merge_batch(self, config):
         """Seeded state should accept new batches on top."""
-        schema = json.dumps({
-            "type": "object",
-            "properties": {"existing_field": {"type": "string"}}
-        })
+        schema = json.dumps(
+            {"type": "object", "properties": {"existing_field": {"type": "string"}}}
+        )
         state = IncrementalSchemaState.seed_from_json_schema("test", schema, config)
 
         # Merge a batch with a new field
@@ -407,6 +462,7 @@ class TestSeedFromJsonSchema:
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCases:
     def test_special_characters_in_event_type(self, inferrer):
@@ -430,6 +486,7 @@ class TestEdgeCases:
     def test_single_event_type_returns_none(self):
         """infer_multi_event should return None for single event type."""
         from schema_infer.core.inferrer import SchemaInferrer as CoreInferrer
+
         inferrer = CoreInferrer(Config())
         messages = [
             (None, json.dumps({"event_type": "only_one", "f": i}).encode())

@@ -36,10 +36,10 @@ from schema_infer.schemas.inference import (
     SchemaInferrer,
 )
 
-
 # ──────────────────────────────────────────────
 #  Merger: "never destructive" guarantee tests
 # ──────────────────────────────────────────────
+
 
 class TestMergerSafety:
     """Tests that the merger never loses data."""
@@ -47,16 +47,20 @@ class TestMergerSafety:
     def test_type_conflict_widens_to_union(self):
         """When types conflict, merger should widen to union — not silently skip."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {"amount": {"type": "integer"}},
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {"amount": {"type": "string"}},
-            "required": []
-        })
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {"amount": {"type": "integer"}},
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"amount": {"type": "string"}},
+                "required": [],
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         # Must produce a union type, not silently keep one
         assert merged["properties"]["amount"]["type"] == ["integer", "string", "null"]
@@ -64,16 +68,20 @@ class TestMergerSafety:
     def test_type_conflict_union_includes_null(self):
         """Union type from conflict should always include null for compatibility."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {"val": {"type": "number"}},
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {"val": {"type": "boolean"}},
-            "required": []
-        })
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {"val": {"type": "number"}},
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"val": {"type": "boolean"}},
+                "required": [],
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         types = merged["properties"]["val"]["type"]
         assert "null" in types
@@ -83,29 +91,31 @@ class TestMergerSafety:
     def test_array_merge_preserves_existing_nested_properties(self):
         """When existing array has nested objects but new doesn't, keep existing."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {
                     "items": {
-                        "type": "object",
-                        "properties": {"id": {"type": "string"}, "name": {"type": "string"}}
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "name": {"type": "string"},
+                            },
+                        },
                     }
-                }
-            },
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                }
-            },
-            "required": []
-        })
+                },
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"items": {"type": "array", "items": {"type": "string"}}},
+                "required": [],
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         # Existing nested properties must be preserved
         items_def = merged["properties"]["items"]["items"]
@@ -116,29 +126,28 @@ class TestMergerSafety:
     def test_array_merge_adopts_new_nested_properties(self):
         """When new array has nested objects but existing doesn't, adopt new."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                }
-            },
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {"items": {"type": "array", "items": {"type": "string"}}},
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {
                     "items": {
-                        "type": "object",
-                        "properties": {"id": {"type": "string"}}
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                        },
                     }
-                }
-            },
-            "required": []
-        })
+                },
+                "required": [],
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         items_def = merged["properties"]["items"]["items"]
         assert "properties" in items_def
@@ -147,11 +156,13 @@ class TestMergerSafety:
     def test_invalid_existing_preserves_new_fields(self):
         """When existing schema is invalid JSON, new fields must not be lost."""
         merger = SchemaMerger()
-        new = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
-            "required": []
-        })
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "integer"}},
+                "required": [],
+            }
+        )
         result = json.loads(merger.merge_flat_schemas("not valid json", new))
         assert "a" in result["properties"]
         assert "b" in result["properties"]
@@ -159,31 +170,33 @@ class TestMergerSafety:
     def test_invalid_new_preserves_existing(self):
         """When new schema is invalid JSON, existing schema must be returned intact."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}},
-            "required": []
-        })
+        existing = json.dumps(
+            {"type": "object", "properties": {"a": {"type": "string"}}, "required": []}
+        )
         result = merger.merge_flat_schemas(existing, "not valid json")
         assert result == existing
 
     def test_merge_never_removes_fields(self):
         """Existing fields must never be removed, even if absent from new."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {
-                "a": {"type": "string"},
-                "b": {"type": "integer"},
-                "c": {"type": "boolean"}
-            },
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {"a": {"type": "string"}, "d": {"type": "number"}},
-            "required": []
-        })
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "string"},
+                    "b": {"type": "integer"},
+                    "c": {"type": "boolean"},
+                },
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "d": {"type": "number"}},
+                "required": [],
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         assert "a" in merged["properties"]
         assert "b" in merged["properties"]
@@ -194,10 +207,14 @@ class TestMergerSafety:
         """Non-404 errors should be logged as warnings, not silently swallowed."""
         merger = SchemaMerger()
         mock_registry = MagicMock()
-        mock_registry.get_latest_schema.side_effect = Exception("500 Internal Server Error")
+        mock_registry.get_latest_schema.side_effect = Exception(
+            "500 Internal Server Error"
+        )
 
-        with patch.object(merger.logger, 'warning') as mock_warn:
-            result = merger.fetch_existing_sub_schemas(mock_registry, "topic", ["type_a"])
+        with patch.object(merger.logger, "warning") as mock_warn:
+            result = merger.fetch_existing_sub_schemas(
+                mock_registry, "topic", ["type_a"]
+            )
             assert result == {}
             mock_warn.assert_called_once()
             assert "500" in str(mock_warn.call_args)
@@ -206,6 +223,7 @@ class TestMergerSafety:
 # ──────────────────────────────────────────────
 #  Nested additionalProperties:false tests
 # ──────────────────────────────────────────────
+
 
 class TestClosedContentModel:
     """Tests that all nested objects have additionalProperties: false."""
@@ -249,12 +267,16 @@ class TestClosedContentModel:
 
         assert result["additionalProperties"] is False
         assert result["properties"]["a"]["additionalProperties"] is False
-        assert result["properties"]["a"]["properties"]["b"]["additionalProperties"] is False
+        assert (
+            result["properties"]["a"]["properties"]["b"]["additionalProperties"]
+            is False
+        )
 
 
 # ──────────────────────────────────────────────
 #  URL encoding tests
 # ──────────────────────────────────────────────
+
 
 class TestURLEncoding:
     """Tests that subject names are URL-encoded in registry URLs."""
@@ -286,6 +308,7 @@ class TestURLEncoding:
 #  Protobuf field numbering tests
 # ──────────────────────────────────────────────
 
+
 class TestProtobufFieldNumbering:
     """Tests that Protobuf field numbers are message-scoped."""
 
@@ -301,7 +324,7 @@ class TestProtobufFieldNumbering:
         ]
         schema = InferredSchema("User", fields)
         proto = gen.generate(schema)
-        lines = proto.split('\n')
+        lines = proto.split("\n")
 
         # Parse field numbers per message scope
         message_fields = {}
@@ -333,7 +356,9 @@ class TestProtobufFieldNumbering:
         # Nested message fields should start at 1 (not continue from parent)
         for name, nums in message_fields.items():
             if name != "__root__" and nums:
-                assert min(nums) == 1, f"Message {name} field numbers should start at 1, got {nums}"
+                assert (
+                    min(nums) == 1
+                ), f"Message {name} field numbers should start at 1, got {nums}"
 
     def test_multiple_nested_messages_independent_numbering(self):
         """Multiple sibling nested messages should each start at 1."""
@@ -356,16 +381,14 @@ class TestProtobufFieldNumbering:
 #  JSON parser array merge tests
 # ──────────────────────────────────────────────
 
+
 class TestJSONParserArrayFix:
     """Tests that JSON parser handles arrays of objects correctly."""
 
     def test_array_of_objects_returns_first_element(self):
         """Parsing an array of objects should return the first element, not merge all."""
         parser = JSONParser()
-        data = json.dumps([
-            {"a": 1, "b": 2},
-            {"a": 3, "c": 4}
-        ]).encode()
+        data = json.dumps([{"a": 1, "b": 2}, {"a": 3, "c": 4}]).encode()
         result = parser.parse(data)
         # Should return first element, not merged {a: 3, b: 2, c: 4}
         assert result == {"a": 1, "b": 2}
@@ -373,10 +396,7 @@ class TestJSONParserArrayFix:
     def test_array_of_objects_no_key_overwrite(self):
         """First element values should not be overwritten by later elements."""
         parser = JSONParser()
-        data = json.dumps([
-            {"key": "original"},
-            {"key": "overwritten"}
-        ]).encode()
+        data = json.dumps([{"key": "original"}, {"key": "overwritten"}]).encode()
         result = parser.parse(data)
         assert result["key"] == "original"
 
@@ -405,6 +425,7 @@ class TestJSONParserArrayFix:
 # ──────────────────────────────────────────────
 #  Config deep-copy test
 # ──────────────────────────────────────────────
+
 
 class TestConfigDeepCopy:
     """Tests that config is deep-copied so mutations don't leak."""
@@ -436,6 +457,7 @@ class TestConfigDeepCopy:
 #  Live mode thread safety tests
 # ──────────────────────────────────────────────
 
+
 class TestLiveModeThreadSafety:
     """Tests for thread safety fixes in LiveModeOrchestrator."""
 
@@ -447,7 +469,7 @@ class TestLiveModeThreadSafety:
         config.schema_registry.url = "http://localhost:8081"
         config.live.persist_state = False
 
-        with patch.object(SchemaRegistry, '_test_connection'):
+        with patch.object(SchemaRegistry, "_test_connection"):
             orch = LiveModeOrchestrator(
                 config=config,
                 topics=["test-topic"],
@@ -538,19 +560,23 @@ class TestLiveModeThreadSafety:
 #  Schema validation on local inference path
 # ──────────────────────────────────────────────
 
+
 class TestLocalInferenceValidation:
     """Tests that --message/--data-file path validates schemas."""
 
     def test_validate_generated_schema_valid_json_schema(self):
         """Valid JSON Schema should pass validation."""
         from schema_infer.utils.validators import validate_generated_schema
-        schema = json.dumps({
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "type": "object",
-            "properties": {"id": {"type": "string"}},
-            "required": [],
-            "additionalProperties": False
-        })
+
+        schema = json.dumps(
+            {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+                "required": [],
+                "additionalProperties": False,
+            }
+        )
         is_valid, error = validate_generated_schema(schema, "json-schema")
         assert is_valid
         assert error == ""
@@ -558,6 +584,7 @@ class TestLocalInferenceValidation:
     def test_validate_generated_schema_invalid_avro(self):
         """Invalid Avro schema should fail validation."""
         from schema_infer.utils.validators import validate_generated_schema
+
         schema = json.dumps({"type": "record"})  # Missing name and fields
         is_valid, error = validate_generated_schema(schema, "avro")
         assert not is_valid
@@ -566,6 +593,7 @@ class TestLocalInferenceValidation:
     def test_validate_generated_schema_invalid_json(self):
         """Non-JSON string should fail validation."""
         from schema_infer.utils.validators import validate_generated_schema
+
         is_valid, error = validate_generated_schema("not json", "json-schema")
         assert not is_valid
 
@@ -579,6 +607,7 @@ class TestLocalInferenceValidation:
         content = gen.generate(schema)
 
         from schema_infer.utils.validators import validate_generated_schema
+
         is_valid, error = validate_generated_schema(content, "json-schema")
         assert is_valid, f"Generated schema should be valid: {error}"
 
@@ -586,10 +615,7 @@ class TestLocalInferenceValidation:
         """Nested objects in local inference should produce valid schema."""
         inferrer = SchemaInferrer()
         records = [
-            {
-                "user": {"name": "John", "age": 30},
-                "items": [{"id": 1, "price": 9.99}]
-            }
+            {"user": {"name": "John", "age": 30}, "items": [{"id": 1, "price": 9.99}]}
         ]
         schema = inferrer.infer_schema(records, "test")
 
@@ -601,6 +627,7 @@ class TestLocalInferenceValidation:
         assert parsed["additionalProperties"] is False
 
         from schema_infer.utils.validators import validate_generated_schema
+
         is_valid, error = validate_generated_schema(content, "json-schema")
         assert is_valid, f"Generated schema should be valid: {error}"
 
@@ -609,44 +636,49 @@ class TestLocalInferenceValidation:
 #  Merger deep merge tests
 # ──────────────────────────────────────────────
 
+
 class TestMergerDeepMerge:
     """Tests for deep recursive merge of nested objects and arrays."""
 
     def test_deep_nested_object_merge(self):
         """Deeply nested objects should be recursively merged."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {
-                "config": {
-                    "type": "object",
-                    "properties": {
-                        "a": {"type": "string"},
-                        "nested": {
-                            "type": "object",
-                            "properties": {"x": {"type": "integer"}}
-                        }
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "properties": {
+                            "a": {"type": "string"},
+                            "nested": {
+                                "type": "object",
+                                "properties": {"x": {"type": "integer"}},
+                            },
+                        },
                     }
-                }
-            },
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {
-                "config": {
-                    "type": "object",
-                    "properties": {
-                        "b": {"type": "number"},
-                        "nested": {
-                            "type": "object",
-                            "properties": {"y": {"type": "string"}}
-                        }
+                },
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "properties": {
+                            "b": {"type": "number"},
+                            "nested": {
+                                "type": "object",
+                                "properties": {"y": {"type": "string"}},
+                            },
+                        },
                     }
-                }
-            },
-            "required": []
-        })
+                },
+                "required": [],
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         config_props = merged["properties"]["config"]["properties"]
         assert "a" in config_props
@@ -658,32 +690,36 @@ class TestMergerDeepMerge:
     def test_array_of_objects_deep_merge(self):
         """Array items with objects should have their properties merged."""
         merger = SchemaMerger()
-        existing = json.dumps({
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
+        existing = json.dumps(
+            {
+                "type": "object",
+                "properties": {
                     "items": {
-                        "type": "object",
-                        "properties": {"id": {"type": "string"}}
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                        },
                     }
-                }
-            },
-            "required": []
-        })
-        new = json.dumps({
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
+                },
+                "required": [],
+            }
+        )
+        new = json.dumps(
+            {
+                "type": "object",
+                "properties": {
                     "items": {
-                        "type": "object",
-                        "properties": {"name": {"type": "string"}}
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"name": {"type": "string"}},
+                        },
                     }
-                }
-            },
-            "required": []
-        })
+                },
+                "required": [],
+            }
+        )
         merged = json.loads(merger.merge_flat_schemas(existing, new))
         items_props = merged["properties"]["items"]["items"]["properties"]
         assert "id" in items_props
@@ -694,6 +730,7 @@ class TestMergerDeepMerge:
 #  Round 2: Empty array, datetime, protobuf,
 #  SR error codes, retry, CI fixes
 # ──────────────────────────────────────────────
+
 
 class TestEmptyArrayInference:
     """Tests for empty array type inference fix."""
@@ -825,25 +862,33 @@ class TestSRErrorDifferentiation:
 
         response = MagicMock()
         response.status_code = 409
-        response.json.return_value = {"error_code": 40901, "message": "Schema violates compatibility"}
-        response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=response)
+        response.json.return_value = {
+            "error_code": 40901,
+            "message": "Schema violates compatibility",
+        }
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=response
+        )
 
         config = Config()
         config.schema_registry.url = "http://localhost:8081"
 
-        with patch.object(SchemaRegistry, '_test_connection'):
+        with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
         with patch("requests.request") as mock_request:
             mock_request.return_value = MagicMock()
-            mock_request.return_value.raise_for_status.side_effect = requests.exceptions.HTTPError(response=response)
+            mock_request.return_value.raise_for_status.side_effect = (
+                requests.exceptions.HTTPError(response=response)
+            )
             mock_request.return_value.status_code = 409
 
             import requests as req
+
             with patch("requests.post") as mock_post:
                 mock_post.side_effect = req.exceptions.HTTPError(response=response)
                 with pytest.raises(SchemaRegistryError, match="incompatible"):
-                    registry.register_schema("topic", '{}', "json-schema")
+                    registry.register_schema("topic", "{}", "json-schema")
 
     def test_error_message_for_401_auth(self):
         """401 errors should produce 'Auth failed' message."""
@@ -852,18 +897,20 @@ class TestSRErrorDifferentiation:
         response = MagicMock()
         response.status_code = 401
         response.json.return_value = {"error_code": 401, "message": "Unauthorized"}
-        response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=response)
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=response
+        )
 
         config = Config()
         config.schema_registry.url = "http://localhost:8081"
 
-        with patch.object(SchemaRegistry, '_test_connection'):
+        with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
         with patch("requests.request") as mock_request:
             mock_request.return_value = response
             with pytest.raises(SchemaRegistryError, match="Auth failed"):
-                registry.register_schema("topic", '{}', "json-schema")
+                registry.register_schema("topic", "{}", "json-schema")
 
 
 class TestRegistryRetryOnGET:
@@ -874,7 +921,7 @@ class TestRegistryRetryOnGET:
         config = Config()
         config.schema_registry.url = "http://localhost:8081"
 
-        with patch.object(SchemaRegistry, '_test_connection'):
+        with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
         success_response = MagicMock()
@@ -890,7 +937,9 @@ class TestRegistryRetryOnGET:
                 success_response,
             ]
             with patch("time.sleep"):
-                result = registry._request_with_retry("get", "http://localhost:8081/test", max_retries=3)
+                result = registry._request_with_retry(
+                    "get", "http://localhost:8081/test", max_retries=3
+                )
             assert result == success_response
             assert mock_req.call_count == 3
 
@@ -899,19 +948,24 @@ class TestRegistryRetryOnGET:
         config = Config()
         config.schema_registry.url = "http://localhost:8081"
 
-        with patch.object(SchemaRegistry, '_test_connection'):
+        with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
         with patch("requests.request") as mock_req:
-            mock_req.side_effect = requests.exceptions.ConnectionError("Connection refused")
+            mock_req.side_effect = requests.exceptions.ConnectionError(
+                "Connection refused"
+            )
             with patch("time.sleep"):
                 with pytest.raises(requests.exceptions.ConnectionError):
-                    registry._request_with_retry("get", "http://localhost:8081/test", max_retries=2)
+                    registry._request_with_retry(
+                        "get", "http://localhost:8081/test", max_retries=2
+                    )
 
 
 # ──────────────────────────────────────────────
 #  Round 4: HIGH severity fixes
 # ──────────────────────────────────────────────
+
 
 class TestConfigSyncFix:
     """Tests for config sync validator replacement."""
@@ -933,13 +987,18 @@ class TestConfigSyncFix:
     def test_load_config_syncs_automatically(self):
         """load_config should call sync_convenience_to_nested."""
         import tempfile, os, yaml
-        cfg = {"kafka": {"bootstrap_servers": "test:9092"}, "bootstrap_servers": "override:9092"}
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+
+        cfg = {
+            "kafka": {"bootstrap_servers": "test:9092"},
+            "bootstrap_servers": "override:9092",
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(cfg, f)
             tmp = f.name
         try:
             from schema_infer.config import load_config
             from pathlib import Path
+
             config = load_config(Path(tmp))
             # The convenience override should be synced to nested kafka config
             assert config.kafka.bootstrap_servers == "override:9092"
@@ -962,10 +1021,11 @@ class TestLiveConsumerRebalanceSafety:
     def test_partition_lock_exists(self):
         """LiveConsumer should have a partition lock."""
         from schema_infer.core.live_consumer import LiveConsumer
+
         config = Config()
         config.kafka.bootstrap_servers = "localhost:9092"
         # Can't fully init without Kafka, just check the class has the attribute
-        assert hasattr(LiveConsumer, '__init__')
+        assert hasattr(LiveConsumer, "__init__")
 
     def test_on_assign_callback_exception_safe(self):
         """on_assign should not crash if orchestrator callback raises."""
@@ -975,15 +1035,17 @@ class TestLiveConsumerRebalanceSafety:
         config = Config()
         config.kafka.bootstrap_servers = "localhost:9092"
 
-        with patch.object(LiveConsumer, '_initialize_consumer'):
+        with patch.object(LiveConsumer, "_initialize_consumer"):
             consumer = LiveConsumer.__new__(LiveConsumer)
             consumer.config = config
             consumer.logger = MagicMock()
             consumer.consumer = MagicMock()
             consumer._assigned_partitions = []
             consumer._assigned_topics = set()
-            consumer._partition_lock = __import__('threading').Lock()
-            consumer._on_topics_assigned = MagicMock(side_effect=Exception("callback boom"))
+            consumer._partition_lock = __import__("threading").Lock()
+            consumer._on_topics_assigned = MagicMock(
+                side_effect=Exception("callback boom")
+            )
             consumer._on_topics_revoked = None
 
             # Subscribe and trigger assignment
@@ -991,7 +1053,11 @@ class TestLiveConsumerRebalanceSafety:
 
             # Get the on_assign callback
             call_args = consumer.consumer.subscribe.call_args
-            on_assign_fn = call_args[1].get('on_assign') or call_args[0][1] if len(call_args[0]) > 1 else call_args[1]['on_assign']
+            on_assign_fn = (
+                call_args[1].get("on_assign") or call_args[0][1]
+                if len(call_args[0]) > 1
+                else call_args[1]["on_assign"]
+            )
 
             # Create mock partitions
             mock_partition = MagicMock()
@@ -1017,7 +1083,7 @@ class TestBrokerErrorEscalation:
         config = Config()
         config.kafka.bootstrap_servers = "localhost:9092"
 
-        with patch.object(LiveConsumer, '_initialize_consumer'):
+        with patch.object(LiveConsumer, "_initialize_consumer"):
             consumer = LiveConsumer.__new__(LiveConsumer)
             consumer.config = config
             consumer.logger = MagicMock()
@@ -1041,6 +1107,7 @@ class TestEmptyEventSchemasGuard:
     def test_empty_event_schemas_returns_empty(self):
         """Empty event_schemas should return empty dict, not invalid oneOf:[]."""
         from schema_infer.schemas.generators import JSONSchemaGenerator
+
         gen = JSONSchemaGenerator()
         result = gen.generate_multi_event("topic", {}, "event_type")
         assert result == {}
@@ -1048,10 +1115,14 @@ class TestEmptyEventSchemasGuard:
     def test_non_empty_event_schemas_produces_valid_oneof(self):
         """Non-empty event_schemas should produce valid oneOf with refs."""
         from schema_infer.schemas.generators import JSONSchemaGenerator
+
         gen = JSONSchemaGenerator()
-        schema = InferredSchema("test", [
-            SchemaField("id", FieldType("string"), required=False),
-        ])
+        schema = InferredSchema(
+            "test",
+            [
+                SchemaField("id", FieldType("string"), required=False),
+            ],
+        )
         result = gen.generate_multi_event("topic", {"type_a": schema}, "event_type")
         main = json.loads(result["topic"])
         assert len(main["oneOf"]) == 1
@@ -1066,10 +1137,10 @@ class TestFormatWarning:
         config = Config()
         config.schema_registry.url = "http://localhost:8081"
 
-        with patch.object(SchemaRegistry, '_test_connection'):
+        with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
-        with patch.object(registry.logger, 'warning') as mock_warn:
+        with patch.object(registry.logger, "warning") as mock_warn:
             result = registry._map_format_to_registry_type("unknown-format")
             assert result == "AVRO"
             mock_warn.assert_called_once()
@@ -1080,10 +1151,10 @@ class TestFormatWarning:
         config = Config()
         config.schema_registry.url = "http://localhost:8081"
 
-        with patch.object(SchemaRegistry, '_test_connection'):
+        with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
-        with patch.object(registry.logger, 'warning') as mock_warn:
+        with patch.object(registry.logger, "warning") as mock_warn:
             assert registry._map_format_to_registry_type("avro") == "AVRO"
             assert registry._map_format_to_registry_type("protobuf") == "PROTOBUF"
             assert registry._map_format_to_registry_type("json-schema") == "JSON"

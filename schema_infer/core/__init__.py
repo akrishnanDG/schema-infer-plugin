@@ -8,6 +8,6 @@ from .registry import SchemaRegistry
 
 __all__ = [
     "KafkaConsumer",
-    "SchemaInferrer", 
+    "SchemaInferrer",
     "SchemaRegistry",
 ]

@@ -11,8 +11,8 @@ import time
 from pathlib import Path
 from typing import List, Optional, Set
 
-os.environ['KAFKA_LOG_LEVEL'] = '3'
-os.environ['RDKAFKA_LOG_LEVEL'] = '3'
+os.environ["KAFKA_LOG_LEVEL"] = "3"
+os.environ["RDKAFKA_LOG_LEVEL"] = "3"
 
 import click
 
@@ -34,16 +34,21 @@ PLUGIN_BUILD = "2026-03-27"
 def _extract_event_types(main_schema_json: str, topic_name: str) -> set:
     """Extract event type names from an existing oneOf main schema."""
     import json
+
     try:
         schema = json.loads(main_schema_json)
         types = set()
         for ref in schema.get("oneOf", []):
             ref_name = ref.get("$ref", "")
             if ref_name.startswith(f"{topic_name}-"):
-                types.add(ref_name[len(f"{topic_name}-"):])
+                types.add(ref_name[len(f"{topic_name}-") :])
         return types
     except Exception as e:
-        logger.debug("Failed to extract event types from schema for topic '%s': %s", topic_name, e)
+        logger.debug(
+            "Failed to extract event types from schema for topic '%s': %s",
+            topic_name,
+            e,
+        )
         return set()
 
 
@@ -212,7 +217,7 @@ def main(
 )
 @click.option(
     "--message",
-    help="Infer schema from a JSON string instead of Kafka (e.g., '{\"id\": 1, \"name\": \"test\"}')",
+    help='Infer schema from a JSON string instead of Kafka (e.g., \'{"id": 1, "name": "test"}\')',
 )
 @click.option(
     "--data-file",
@@ -317,7 +322,9 @@ def infer(
     if internal_prefix is not None:
         config.topic_filter.internal_prefix = internal_prefix
     if additional_exclude_prefixes is not None:
-        config.topic_filter.additional_exclude_prefixes = [p.strip() for p in additional_exclude_prefixes.split(",") if p.strip()]
+        config.topic_filter.additional_exclude_prefixes = [
+            p.strip() for p in additional_exclude_prefixes.split(",") if p.strip()
+        ]
     if context is not None:
         config.schema_registry.context = context
 
@@ -352,10 +359,16 @@ def infer(
                     # Filter to dicts only; reject arrays of primitives
                     records = [item for item in parsed if isinstance(item, dict)]
                     if not records:
-                        click.echo("Error: --message JSON array must contain objects, not primitives", err=True)
+                        click.echo(
+                            "Error: --message JSON array must contain objects, not primitives",
+                            err=True,
+                        )
                         sys.exit(1)
                 else:
-                    click.echo(f"Error: --message must be a JSON object or array of objects, got {type(parsed).__name__}", err=True)
+                    click.echo(
+                        f"Error: --message must be a JSON object or array of objects, got {type(parsed).__name__}",
+                        err=True,
+                    )
                     sys.exit(1)
             except _json.JSONDecodeError as e:
                 click.echo(f"Error: Invalid JSON in --message: {e}", err=True)
@@ -370,7 +383,10 @@ def infer(
                     elif isinstance(parsed, list):
                         records = [item for item in parsed if isinstance(item, dict)]
                     else:
-                        click.echo(f"Error: --data-file must contain a JSON object or array of objects", err=True)
+                        click.echo(
+                            f"Error: --data-file must contain a JSON object or array of objects",
+                            err=True,
+                        )
                         sys.exit(1)
                 except _json.JSONDecodeError:
                     # Try JSONL (one JSON object per line)
@@ -382,7 +398,10 @@ def infer(
                             if isinstance(parsed_line, dict):
                                 records.append(parsed_line)
             except _json.JSONDecodeError as e:
-                click.echo(f"Error: Invalid JSON in {data_file} at line {line_num}: {e}", err=True)
+                click.echo(
+                    f"Error: Invalid JSON in {data_file} at line {line_num}: {e}",
+                    err=True,
+                )
                 sys.exit(1)
             except Exception as e:
                 click.echo(f"Error: Failed to read {data_file}: {e}", err=True)
@@ -406,9 +425,12 @@ def infer(
 
         # Validate generated schema before output or registration
         from ..utils.validators import validate_generated_schema
+
         is_valid, validation_error = validate_generated_schema(schema_content, format)
         if not is_valid:
-            click.echo(f"Error: Generated schema is invalid: {validation_error}", err=True)
+            click.echo(
+                f"Error: Generated schema is invalid: {validation_error}", err=True
+            )
             sys.exit(1)
 
         if output:
@@ -421,7 +443,9 @@ def infer(
         if register:
             registry = SchemaRegistry(config)
             try:
-                schema_id = registry.register_schema(schema_name, schema_content, format)
+                schema_id = registry.register_schema(
+                    schema_name, schema_content, format
+                )
                 click.echo(f"Registered schema with ID: {schema_id}")
             except Exception as e:
                 click.echo(f"Error registering schema: {e}", err=True)
@@ -431,16 +455,27 @@ def infer(
 
     # Validate input — Kafka mode requires topic specification
     if not any([topic, topics, topic_prefix, topic_pattern]):
-        click.echo("Error: Must specify either --topic, --topics, --topic-prefix, --topic-pattern, --message, or --data-file", err=True)
+        click.echo(
+            "Error: Must specify either --topic, --topics, --topic-prefix, --topic-pattern, --message, or --data-file",
+            err=True,
+        )
         sys.exit(1)
 
     if not register and not output and not output_dir:
-        click.echo("Error: Must specify either --register, --output, or --output-dir", err=True)
+        click.echo(
+            "Error: Must specify either --register, --output, or --output-dir", err=True
+        )
         sys.exit(1)
 
     # Validate input parameters
-    if topics and any(pattern in topics for pattern in ['.*', '^', '$', '+', '*', '?', '[', ']', '(', ')']):
-        click.echo("Error: Regex patterns like '.*' should be used with --topic-pattern, not --topics", err=True)
+    if topics and any(
+        pattern in topics
+        for pattern in [".*", "^", "$", "+", "*", "?", "[", "]", "(", ")"]
+    ):
+        click.echo(
+            "Error: Regex patterns like '.*' should be used with --topic-pattern, not --topics",
+            err=True,
+        )
         click.echo("Hint: Try --topic-pattern '.*' instead of --topics '.*'", err=True)
         sys.exit(1)
 
@@ -451,7 +486,7 @@ def infer(
         topics=topics,
         topic_prefix=topic_prefix,
         topic_pattern=topic_pattern,
-        exclude_internal=exclude_internal
+        exclude_internal=exclude_internal,
     )
 
     if not topic_list:
@@ -463,7 +498,7 @@ def infer(
     # Update config with CLI options
     config.max_messages = max_messages
     config.timeout = timeout
-    config.auto_detect_format = (data_format == "auto")
+    config.auto_detect_format = data_format == "auto"
     config.forced_data_format = data_format if data_format != "auto" else None
 
     error_details = []  # Track detailed error information
@@ -480,6 +515,7 @@ def infer(
 
             from tqdm import tqdm
             import time
+
             start_time = time.time()
 
             # Scale processing workers based on topic count
@@ -498,8 +534,8 @@ def infer(
                 desc=f"Reading messages ({num_readers} readers)",
                 unit="topic",
                 disable=not config.performance.show_progress,
-                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
-                dynamic_ncols=True
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+                dynamic_ncols=True,
             )
 
             def _progress(completed, total):
@@ -508,7 +544,9 @@ def infer(
             # Read from all topics using a small reader pool (few consumers)
             # Processing workers (num_workers) are used later for inference/registration
             topic_messages = processor.read_topics_parallel(
-                topic_list, max_messages, timeout,
+                topic_list,
+                max_messages,
+                timeout,
                 max_readers=num_readers,
                 progress_callback=_progress,
             )
@@ -533,15 +571,17 @@ def infer(
                     desc="Generating schemas",
                     unit="schema",
                     disable=not config.performance.show_progress,
-                    bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
-                    dynamic_ncols=True
+                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+                    dynamic_ncols=True,
                 )
 
                 results = inferrer.process_topics_parallel(
                     topic_messages=topic_messages,
                     output_format=format,
                     output_dir=output_dir,
-                    progress_callback=lambda completed, total: schema_progress.update(1),
+                    progress_callback=lambda completed, total: schema_progress.update(
+                        1
+                    ),
                     flatten=flatten,
                     discriminator=discriminator,
                 )
@@ -550,24 +590,32 @@ def infer(
                 schema_elapsed = time.time() - schema_start_time
 
                 if config.performance.show_progress:
-                    multi_count = len(results.get('multi_event', {}))
-                    flat_count = len(results.get('schemas', {}))
+                    multi_count = len(results.get("multi_event", {}))
+                    flat_count = len(results.get("schemas", {}))
                     click.echo(
                         f"Schema generation completed in {schema_elapsed:.1f}s"
-                        + (f" ({multi_count} multi-event, {flat_count} flat)" if multi_count else "")
+                        + (
+                            f" ({multi_count} multi-event, {flat_count} flat)"
+                            if multi_count
+                            else ""
+                        )
                     )
 
-                success_count = results['successful']
-                error_count = results['failed']
+                success_count = results["successful"]
+                error_count = results["failed"]
 
                 # Populate error_details from topics that failed inference
                 for tn, msgs in topic_messages.items():
-                    if tn not in results.get('schemas', {}) and tn not in results.get('multi_event', {}):
-                        error_details.append({
-                            'topic': tn,
-                            'reason': 'Schema inference failed — messages may be in unsupported format',
-                            'type': 'schema_inference_failed'
-                        })
+                    if tn not in results.get("schemas", {}) and tn not in results.get(
+                        "multi_event", {}
+                    ):
+                        error_details.append(
+                            {
+                                "topic": tn,
+                                "reason": "Schema inference failed — messages may be in unsupported format",
+                                "type": "schema_inference_failed",
+                            }
+                        )
 
                 # Register schemas if requested
                 if register and registry:
@@ -576,40 +624,60 @@ def infer(
                     import threading
 
                     # Count total registrations needed
-                    flat_schemas = results.get('schemas', {})
-                    multi_event_topics = results.get('multi_event', {})
+                    flat_schemas = results.get("schemas", {})
+                    multi_event_topics = results.get("multi_event", {})
                     total_reg = len(flat_schemas) + len(multi_event_topics)
 
                     if total_reg > 0:
                         reg_workers = min(config.performance.max_workers, total_reg)
-                        click.echo(f"\nRegistering schemas to Schema Registry ({reg_workers} workers)...")
+                        click.echo(
+                            f"\nRegistering schemas to Schema Registry ({reg_workers} workers)..."
+                        )
 
                         reg_start = time.time()
                         reg_success = 0
                         reg_fail = 0
 
                         from ..core.merger import SchemaMerger
+
                         merger = SchemaMerger()
 
                         # Register flat schemas in parallel (with merge)
                         if flat_schemas:
+
                             def _register_one(topic_name, schema_dict):
-                                schema_content = inferrer.generate_schema(schema_dict, format)
+                                schema_content = inferrer.generate_schema(
+                                    schema_dict, format
+                                )
                                 # Merge with existing SR schema (JSON Schema only)
                                 if format == "json-schema":
                                     try:
-                                        subject = registry._generate_subject_name(topic_name, format)
+                                        subject = registry._generate_subject_name(
+                                            topic_name, format
+                                        )
                                         existing = registry.get_latest_schema(subject)
                                         if existing and "schema" in existing:
                                             schema_content = merger.merge_flat_schemas(
                                                 existing["schema"], schema_content
                                             )
                                     except Exception as e:
-                                        logger.debug("Skipping schema merge for '%s': %s", topic_name, e)
-                                is_valid, validation_error = validate_generated_schema(schema_content, format)
+                                        logger.debug(
+                                            "Skipping schema merge for '%s': %s",
+                                            topic_name,
+                                            e,
+                                        )
+                                is_valid, validation_error = validate_generated_schema(
+                                    schema_content, format
+                                )
                                 if not is_valid:
-                                    return (topic_name, False, f"Generated schema is invalid: {validation_error}")
-                                schema_id = registry.register_schema(topic_name, schema_content, format)
+                                    return (
+                                        topic_name,
+                                        False,
+                                        f"Generated schema is invalid: {validation_error}",
+                                    )
+                                schema_id = registry.register_schema(
+                                    topic_name, schema_content, format
+                                )
                                 return (topic_name, True, schema_id)
 
                             reg_progress = tqdm(
@@ -617,11 +685,13 @@ def infer(
                                 desc=f"Registering flat schemas",
                                 unit="schema",
                                 disable=not config.performance.show_progress,
-                                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
+                                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
                                 dynamic_ncols=True,
                             )
 
-                            with ThreadPoolExecutor(max_workers=reg_workers) as reg_executor:
+                            with ThreadPoolExecutor(
+                                max_workers=reg_workers
+                            ) as reg_executor:
                                 future_to_topic = {
                                     reg_executor.submit(_register_one, tn, sd): tn
                                     for tn, sd in flat_schemas.items()
@@ -633,15 +703,33 @@ def infer(
                                         if ok:
                                             reg_success += 1
                                         else:
-                                            click.echo(f"  FAIL {topic_name}: {result_val}", err=True)
-                                            error_details.append({'topic': topic_name, 'reason': str(result_val), 'type': 'schema_registry_error'})
+                                            click.echo(
+                                                f"  FAIL {topic_name}: {result_val}",
+                                                err=True,
+                                            )
+                                            error_details.append(
+                                                {
+                                                    "topic": topic_name,
+                                                    "reason": str(result_val),
+                                                    "type": "schema_registry_error",
+                                                }
+                                            )
                                             error_count += 1
                                             success_count -= 1
                                             reg_fail += 1
                                     except Exception as e:
                                         tn = future_to_topic[future]
-                                        click.echo(f"  FAIL {tn}: Registration failed - {e}", err=True)
-                                        error_details.append({'topic': tn, 'reason': f"Registration failed: {e}", 'type': 'schema_registry_error'})
+                                        click.echo(
+                                            f"  FAIL {tn}: Registration failed - {e}",
+                                            err=True,
+                                        )
+                                        error_details.append(
+                                            {
+                                                "topic": tn,
+                                                "reason": f"Registration failed: {e}",
+                                                "type": "schema_registry_error",
+                                            }
+                                        )
                                         error_count += 1
                                         success_count -= 1
                                         reg_fail += 1
@@ -651,8 +739,12 @@ def infer(
                         # Register multi-event schemas (with merge)
                         for topic_name, me_result in multi_event_topics.items():
                             try:
-                                schema_files = me_result['schema_files']
-                                event_types = list(me_result['multi_event_data']['event_schemas'].keys())
+                                schema_files = me_result["schema_files"]
+                                event_types = list(
+                                    me_result["multi_event_data"][
+                                        "event_schemas"
+                                    ].keys()
+                                )
 
                                 sub_contents = {
                                     et: schema_files[f"{topic_name}.{et}"]
@@ -662,25 +754,48 @@ def infer(
 
                                 # Merge with existing SR schemas
                                 try:
-                                    main_subject = registry._generate_subject_name(topic_name, format)
-                                    existing_main = registry.get_latest_schema(main_subject)
+                                    main_subject = registry._generate_subject_name(
+                                        topic_name, format
+                                    )
+                                    existing_main = registry.get_latest_schema(
+                                        main_subject
+                                    )
                                     if existing_main and "schema" in existing_main:
-                                        existing_sub = merger.fetch_existing_sub_schemas(
-                                            registry, topic_name,
-                                            list(set(event_types) | _extract_event_types(existing_main["schema"], topic_name))
+                                        existing_sub = (
+                                            merger.fetch_existing_sub_schemas(
+                                                registry,
+                                                topic_name,
+                                                list(
+                                                    set(event_types)
+                                                    | _extract_event_types(
+                                                        existing_main["schema"],
+                                                        topic_name,
+                                                    )
+                                                ),
+                                            )
                                         )
                                         merged = merger.merge_multi_event_schemas(
-                                            existing_main["schema"], sub_contents,
-                                            main_content, topic_name, existing_sub
+                                            existing_main["schema"],
+                                            sub_contents,
+                                            main_content,
+                                            topic_name,
+                                            existing_sub,
                                         )
                                         main_content = merged[topic_name]
                                         sub_contents = {
                                             et: merged[f"{topic_name}.{et}"]
-                                            for et in sorted(set(sub_contents.keys()) | set(existing_sub.keys()))
+                                            for et in sorted(
+                                                set(sub_contents.keys())
+                                                | set(existing_sub.keys())
+                                            )
                                             if f"{topic_name}.{et}" in merged
                                         }
                                 except Exception as e:
-                                    logger.debug("Skipping multi-event schema merge for '%s': %s", topic_name, e)
+                                    logger.debug(
+                                        "Skipping multi-event schema merge for '%s': %s",
+                                        topic_name,
+                                        e,
+                                    )
 
                                 reg_result = registry.register_multi_event_schemas(
                                     topic_name, sub_contents, main_content, format
@@ -691,12 +806,23 @@ def infer(
                                     f"({len(sub_contents)} sub + 1 main with references)"
                                 )
                             except Exception as e:
-                                click.echo(f"  FAIL {topic_name}: Multi-event registration failed - {e}", err=True)
-                                error_details.append({'topic': topic_name, 'reason': f"Multi-event registration failed: {e}", 'type': 'schema_registry_error'})
+                                click.echo(
+                                    f"  FAIL {topic_name}: Multi-event registration failed - {e}",
+                                    err=True,
+                                )
+                                error_details.append(
+                                    {
+                                        "topic": topic_name,
+                                        "reason": f"Multi-event registration failed: {e}",
+                                        "type": "schema_registry_error",
+                                    }
+                                )
                                 reg_fail += 1
 
                         reg_elapsed = time.time() - reg_start
-                        click.echo(f"Registration completed in {reg_elapsed:.1f}s ({reg_success} registered, {reg_fail} failed)")
+                        click.echo(
+                            f"Registration completed in {reg_elapsed:.1f}s ({reg_success} registered, {reg_fail} failed)"
+                        )
             else:
                 success_count = 0
                 error_count = len(topic_list)
@@ -709,6 +835,7 @@ def infer(
             # Create progress bar for single topic processing
             from tqdm import tqdm
             import time
+
             start_time = time.time()
 
             progress_bar = tqdm(
@@ -716,8 +843,8 @@ def infer(
                 desc="Processing topic",
                 unit="topic",
                 disable=True,  # No progress bar for single topic
-                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]',
-                dynamic_ncols=True
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+                dynamic_ncols=True,
             )
 
             for topic_name in topic_list:
@@ -725,33 +852,49 @@ def infer(
                     topic_start_time = time.time()
 
                     # Read messages using shared consumer for better performance
-                    messages = processor.read_messages_shared_consumer(topic_name, max_messages, timeout)
+                    messages = processor.read_messages_shared_consumer(
+                        topic_name, max_messages, timeout
+                    )
 
                     topic_elapsed = time.time() - topic_start_time
 
                     if not messages:
                         error_reason = "No messages found - topic may be empty or all messages expired"
-                        error_details.append({
-                            'topic': topic_name,
-                            'reason': error_reason,
-                            'type': 'empty'
-                        })
+                        error_details.append(
+                            {
+                                "topic": topic_name,
+                                "reason": error_reason,
+                                "type": "empty",
+                            }
+                        )
                         if not config.performance.show_progress:
                             click.echo(f"  WARN {topic_name}: {error_reason}")
-                        progress_bar.set_postfix({
-                            'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                            'time': f'{topic_elapsed:.1f}s',
-                            'status': 'empty'
-                        })
+                        progress_bar.set_postfix(
+                            {
+                                "topic": (
+                                    topic_name[:20] + "..."
+                                    if len(topic_name) > 20
+                                    else topic_name
+                                ),
+                                "time": f"{topic_elapsed:.1f}s",
+                                "status": "empty",
+                            }
+                        )
                         error_count += 1
                         progress_bar.update(1)
                         continue
 
-                    progress_bar.set_postfix({
-                        'messages': len(messages),
-                        'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                        'time': f'{topic_elapsed:.1f}s'
-                    })
+                    progress_bar.set_postfix(
+                        {
+                            "messages": len(messages),
+                            "topic": (
+                                topic_name[:20] + "..."
+                                if len(topic_name) > 20
+                                else topic_name
+                            ),
+                            "time": f"{topic_elapsed:.1f}s",
+                        }
+                    )
 
                     # Try multi-event inference first (JSON Schema only, unless --flatten)
                     multi_event_result = None
@@ -774,6 +917,7 @@ def infer(
 
                         # Generate sub-schemas + main oneOf schema
                         from ..schemas.generators import JSONSchemaGenerator
+
                         json_gen = JSONSchemaGenerator()
 
                         # Convert event schema dicts back to InferredSchema objects
@@ -796,6 +940,7 @@ def infer(
                         if register and registry:
                             try:
                                 from ..core.merger import SchemaMerger
+
                                 merger = SchemaMerger()
 
                                 sub_contents = {
@@ -806,26 +951,49 @@ def infer(
 
                                 # Check for existing main schema and merge
                                 try:
-                                    main_subject = registry._generate_subject_name(topic_name, format)
-                                    existing_main = registry.get_latest_schema(main_subject)
+                                    main_subject = registry._generate_subject_name(
+                                        topic_name, format
+                                    )
+                                    existing_main = registry.get_latest_schema(
+                                        main_subject
+                                    )
                                     if existing_main and "schema" in existing_main:
-                                        existing_sub = merger.fetch_existing_sub_schemas(
-                                            registry, topic_name,
-                                            list(set(event_types) | _extract_event_types(existing_main["schema"], topic_name))
+                                        existing_sub = (
+                                            merger.fetch_existing_sub_schemas(
+                                                registry,
+                                                topic_name,
+                                                list(
+                                                    set(event_types)
+                                                    | _extract_event_types(
+                                                        existing_main["schema"],
+                                                        topic_name,
+                                                    )
+                                                ),
+                                            )
                                         )
                                         merged = merger.merge_multi_event_schemas(
-                                            existing_main["schema"], sub_contents,
-                                            main_content, topic_name, existing_sub
+                                            existing_main["schema"],
+                                            sub_contents,
+                                            main_content,
+                                            topic_name,
+                                            existing_sub,
                                         )
                                         # Update with merged results
                                         main_content = merged[topic_name]
                                         sub_contents = {
                                             et: merged[f"{topic_name}.{et}"]
-                                            for et in sorted(set(sub_contents.keys()) | set(existing_sub.keys()))
+                                            for et in sorted(
+                                                set(sub_contents.keys())
+                                                | set(existing_sub.keys())
+                                            )
                                             if f"{topic_name}.{et}" in merged
                                         }
                                 except Exception as e:
-                                    logger.debug("Skipping multi-event schema merge for '%s': %s", topic_name, e)
+                                    logger.debug(
+                                        "Skipping multi-event schema merge for '%s': %s",
+                                        topic_name,
+                                        e,
+                                    )
 
                                 reg_result = registry.register_multi_event_schemas(
                                     topic_name, sub_contents, main_content, format
@@ -835,7 +1003,10 @@ def infer(
                                     f"({len(sub_contents)} sub-schemas + 1 main with references)"
                                 )
                             except Exception as e:
-                                click.echo(f"  FAIL {topic_name}: Multi-event registration failed - {e}", err=True)
+                                click.echo(
+                                    f"  FAIL {topic_name}: Multi-event registration failed - {e}",
+                                    err=True,
+                                )
                                 error_count += 1
                                 progress_bar.update(1)
                                 continue
@@ -848,18 +1019,26 @@ def infer(
 
                         if not schema_dict:
                             error_reason = "Could not infer schema - messages may be in unsupported format or corrupted"
-                            error_details.append({
-                                'topic': topic_name,
-                                'reason': error_reason,
-                                'type': 'schema_inference_failed'
-                            })
+                            error_details.append(
+                                {
+                                    "topic": topic_name,
+                                    "reason": error_reason,
+                                    "type": "schema_inference_failed",
+                                }
+                            )
                             if not config.performance.show_progress:
                                 click.echo(f"  FAIL {topic_name}: {error_reason}")
-                            progress_bar.set_postfix({
-                                'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                                'time': f'{topic_elapsed:.1f}s',
-                                'status': 'failed'
-                            })
+                            progress_bar.set_postfix(
+                                {
+                                    "topic": (
+                                        topic_name[:20] + "..."
+                                        if len(topic_name) > 20
+                                        else topic_name
+                                    ),
+                                    "time": f"{topic_elapsed:.1f}s",
+                                    "status": "failed",
+                                }
+                            )
                             error_count += 1
                             progress_bar.update(1)
                             continue
@@ -872,7 +1051,10 @@ def infer(
                             if format == "json-schema":
                                 try:
                                     from ..core.merger import SchemaMerger
-                                    subject = registry._generate_subject_name(topic_name, format)
+
+                                    subject = registry._generate_subject_name(
+                                        topic_name, format
+                                    )
                                     existing = registry.get_latest_schema(subject)
                                     if existing and "schema" in existing:
                                         merger = SchemaMerger()
@@ -880,33 +1062,54 @@ def infer(
                                             existing["schema"], schema_content
                                         )
                                 except Exception as e:
-                                    logger.debug("Skipping schema merge for '%s': %s", topic_name, e)
+                                    logger.debug(
+                                        "Skipping schema merge for '%s': %s",
+                                        topic_name,
+                                        e,
+                                    )
 
                             from ..utils.validators import validate_generated_schema
-                            is_valid, validation_error = validate_generated_schema(schema_content, format)
+
+                            is_valid, validation_error = validate_generated_schema(
+                                schema_content, format
+                            )
                             if not is_valid:
-                                error_reason = f"Generated schema is invalid: {validation_error}"
-                                error_details.append({
-                                    'topic': topic_name,
-                                    'reason': error_reason,
-                                    'type': 'schema_validation_error'
-                                })
-                                click.echo(f"  FAIL {topic_name}: {error_reason}", err=True)
+                                error_reason = (
+                                    f"Generated schema is invalid: {validation_error}"
+                                )
+                                error_details.append(
+                                    {
+                                        "topic": topic_name,
+                                        "reason": error_reason,
+                                        "type": "schema_validation_error",
+                                    }
+                                )
+                                click.echo(
+                                    f"  FAIL {topic_name}: {error_reason}", err=True
+                                )
                                 error_count += 1
                                 continue
                             try:
-                                schema_id = registry.register_schema(topic_name, schema_content, format)
+                                schema_id = registry.register_schema(
+                                    topic_name, schema_content, format
+                                )
                                 if not config.performance.show_progress:
-                                    click.echo(f"  OK Registered schema with ID: {schema_id}")
+                                    click.echo(
+                                        f"  OK Registered schema with ID: {schema_id}"
+                                    )
                             except Exception as e:
                                 error_reason = f"Failed to register schema to Schema Registry: {str(e)}"
-                                error_details.append({
-                                    'topic': topic_name,
-                                    'reason': error_reason,
-                                    'type': 'schema_registry_error'
-                                })
+                                error_details.append(
+                                    {
+                                        "topic": topic_name,
+                                        "reason": error_reason,
+                                        "type": "schema_registry_error",
+                                    }
+                                )
                                 if not config.performance.show_progress:
-                                    click.echo(f"  FAIL {topic_name}: {error_reason}", err=True)
+                                    click.echo(
+                                        f"  FAIL {topic_name}: {error_reason}", err=True
+                                    )
                                 error_count += 1
                                 progress_bar.update(1)
                                 continue
@@ -918,20 +1121,32 @@ def infer(
 
                         if output_dir:
                             output_dir.mkdir(parents=True, exist_ok=True)
-                            extensions = {"avro": "avsc", "protobuf": "proto", "json-schema": "json"}
-                            schema_file = output_dir / f"{topic_name}.{extensions[format]}"
+                            extensions = {
+                                "avro": "avsc",
+                                "protobuf": "proto",
+                                "json-schema": "json",
+                            }
+                            schema_file = (
+                                output_dir / f"{topic_name}.{extensions[format]}"
+                            )
                             schema_file.write_text(schema_content)
                             if not config.performance.show_progress:
                                 click.echo(f"  Schema written to: {schema_file}")
 
                         success_count += 1
 
-                    progress_bar.set_postfix({
-                        'messages': len(messages),
-                        'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                        'time': f'{topic_elapsed:.1f}s',
-                        'status': 'success'
-                    })
+                    progress_bar.set_postfix(
+                        {
+                            "messages": len(messages),
+                            "topic": (
+                                topic_name[:20] + "..."
+                                if len(topic_name) > 20
+                                else topic_name
+                            ),
+                            "time": f"{topic_elapsed:.1f}s",
+                            "status": "success",
+                        }
+                    )
                     progress_bar.update(1)
 
                 except KeyboardInterrupt:
@@ -940,36 +1155,55 @@ def infer(
                 except Exception as e:
                     # Determine error type and reason
                     error_str = str(e)
-                    if "Failed to resolve" in error_str or "nodename nor servname provided" in error_str:
-                        error_reason = "Network connectivity issue - cannot reach Kafka broker"
+                    if (
+                        "Failed to resolve" in error_str
+                        or "nodename nor servname provided" in error_str
+                    ):
+                        error_reason = (
+                            "Network connectivity issue - cannot reach Kafka broker"
+                        )
                         error_type = "network_error"
                     elif "Authentication" in error_str or "SASL" in error_str:
                         error_reason = "Authentication failed - check credentials and configuration"
                         error_type = "auth_error"
-                    elif "Topic not found" in error_str or "UnknownTopicOrPartition" in error_str:
+                    elif (
+                        "Topic not found" in error_str
+                        or "UnknownTopicOrPartition" in error_str
+                    ):
                         error_reason = "Topic does not exist or is not accessible"
                         error_type = "topic_not_found"
-                    elif "Permission denied" in error_str or "Not authorized" in error_str:
+                    elif (
+                        "Permission denied" in error_str
+                        or "Not authorized" in error_str
+                    ):
                         error_reason = "Permission denied - insufficient access rights"
                         error_type = "permission_error"
                     else:
                         error_reason = f"Processing error: {error_str}"
                         error_type = "processing_error"
 
-                    error_details.append({
-                        'topic': topic_name,
-                        'reason': error_reason,
-                        'type': error_type
-                    })
+                    error_details.append(
+                        {
+                            "topic": topic_name,
+                            "reason": error_reason,
+                            "type": error_type,
+                        }
+                    )
 
                     if not config.performance.show_progress:
                         click.echo(f"  FAIL {topic_name}: {error_reason}", err=True)
                     elapsed = time.time() - topic_start_time
-                    progress_bar.set_postfix({
-                        'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                        'time': f'{elapsed:.1f}s',
-                        'status': 'error'
-                    })
+                    progress_bar.set_postfix(
+                        {
+                            "topic": (
+                                topic_name[:20] + "..."
+                                if len(topic_name) > 20
+                                else topic_name
+                            ),
+                            "time": f"{elapsed:.1f}s",
+                            "status": "error",
+                        }
+                    )
                     error_count += 1
                     progress_bar.update(1)
                     continue
@@ -994,7 +1228,7 @@ def infer(
             # Group errors by type for better organization
             error_groups = {}
             for error in error_details:
-                error_type = error['type']
+                error_type = error["type"]
                 if error_type not in error_groups:
                     error_groups[error_type] = []
                 error_groups[error_type].append(error)
@@ -1002,16 +1236,16 @@ def infer(
             # Display errors grouped by type
             for error_type, errors in error_groups.items():
                 type_name = {
-                    'empty': 'Empty Topics',
-                    'network_error': 'Network Issues',
-                    'auth_error': 'Authentication Issues',
-                    'topic_not_found': 'Topic Not Found',
-                    'permission_error': 'Permission Issues',
-                    'schema_inference_failed': 'Schema Inference Failed',
-                    'schema_registry_error': 'Schema Registry Issues',
-                    'schema_validation_error': 'Schema Validation Errors',
-                    'processing_error': 'Processing Errors'
-                }.get(error_type, 'Other Errors')
+                    "empty": "Empty Topics",
+                    "network_error": "Network Issues",
+                    "auth_error": "Authentication Issues",
+                    "topic_not_found": "Topic Not Found",
+                    "permission_error": "Permission Issues",
+                    "schema_inference_failed": "Schema Inference Failed",
+                    "schema_registry_error": "Schema Registry Issues",
+                    "schema_validation_error": "Schema Validation Errors",
+                    "processing_error": "Processing Errors",
+                }.get(error_type, "Other Errors")
 
                 click.echo(f"\n  {type_name} ({len(errors)}):")
                 for error in errors:
@@ -1019,21 +1253,35 @@ def infer(
 
             # Show suggestions based on error types
             click.echo(f"\nSuggestions:")
-            if any(e['type'] == 'network_error' for e in error_details):
-                click.echo(f"  - Check your network connection and Kafka broker addresses")
-                click.echo(f"  - Verify bootstrap servers are reachable from your network")
-            if any(e['type'] == 'auth_error' for e in error_details):
-                click.echo(f"  - Verify your API keys and secrets in the configuration file")
-                click.echo(f"  - Check authentication method (SASL_SSL, etc.) matches your cluster")
-            if any(e['type'] == 'empty' for e in error_details):
+            if any(e["type"] == "network_error" for e in error_details):
+                click.echo(
+                    f"  - Check your network connection and Kafka broker addresses"
+                )
+                click.echo(
+                    f"  - Verify bootstrap servers are reachable from your network"
+                )
+            if any(e["type"] == "auth_error" for e in error_details):
+                click.echo(
+                    f"  - Verify your API keys and secrets in the configuration file"
+                )
+                click.echo(
+                    f"  - Check authentication method (SASL_SSL, etc.) matches your cluster"
+                )
+            if any(e["type"] == "empty" for e in error_details):
                 click.echo(f"  - Topics may be empty or have expired messages")
-                click.echo(f"  - Try increasing --max-messages or check topic retention settings")
-            if any(e['type'] == 'schema_inference_failed' for e in error_details):
-                click.echo(f"  - Messages may be in binary format or unsupported structure")
+                click.echo(
+                    f"  - Try increasing --max-messages or check topic retention settings"
+                )
+            if any(e["type"] == "schema_inference_failed" for e in error_details):
+                click.echo(
+                    f"  - Messages may be in binary format or unsupported structure"
+                )
                 click.echo(f"  - Try specifying --data-format explicitly")
-            if any(e['type'] == 'schema_validation_error' for e in error_details):
+            if any(e["type"] == "schema_validation_error" for e in error_details):
                 click.echo(f"  - The generated schema has structural issues")
-                click.echo(f"  - Try a different --format or increase --max-messages for better inference")
+                click.echo(
+                    f"  - Try a different --format or increase --max-messages for better inference"
+                )
 
     if error_count > 0:
         sys.exit(1)
@@ -1122,7 +1370,9 @@ def list_topics(
     if internal_prefix is not None:
         config.topic_filter.internal_prefix = internal_prefix
     if additional_exclude_prefixes is not None:
-        config.topic_filter.additional_exclude_prefixes = [p.strip() for p in additional_exclude_prefixes.split(",") if p.strip()]
+        config.topic_filter.additional_exclude_prefixes = [
+            p.strip() for p in additional_exclude_prefixes.split(",") if p.strip()
+        ]
 
     try:
         discovery = TopicDiscovery(config)
@@ -1131,7 +1381,7 @@ def list_topics(
         topic_list = discovery.discover_topics(
             topic_prefix=topic_prefix,
             topic_pattern=topic_pattern,
-            exclude_internal=exclude_internal
+            exclude_internal=exclude_internal,
         )
 
         if not topic_list:
@@ -1256,7 +1506,11 @@ def validate_topics(
                 click.echo(f"  {topic}")
 
         # Summary
-        total_issues = len(results["invalid"]) + len(results["not_found"]) + len(results["inaccessible"])
+        total_issues = (
+            len(results["invalid"])
+            + len(results["not_found"])
+            + len(results["inaccessible"])
+        )
         if total_issues > 0:
             click.echo(f"\nFound {total_issues} issues with topic access")
             sys.exit(1)
@@ -1373,7 +1627,7 @@ def version() -> None:
     "--from-beginning",
     is_flag=True,
     help="Start consuming from the earliest offset (useful for initial bootstrap). "
-         "Only applies when no committed offsets exist for the consumer group.",
+    "Only applies when no committed offsets exist for the consumer group.",
 )
 @click.pass_context
 def live(
@@ -1446,8 +1700,14 @@ def live(
 
     # Apply CLI overrides to live config
     effective_consumer_group = consumer_group or config.live.consumer_group
-    effective_batch_size = batch_size if batch_size is not None else config.live.batch_size
-    effective_batch_timeout = batch_timeout if batch_timeout is not None else config.live.batch_timeout_seconds
+    effective_batch_size = (
+        batch_size if batch_size is not None else config.live.batch_size
+    )
+    effective_batch_timeout = (
+        batch_timeout
+        if batch_timeout is not None
+        else config.live.batch_timeout_seconds
+    )
     effective_on_incompatible = on_incompatible or config.live.on_incompatible
 
     # Validate input
