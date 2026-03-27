@@ -377,8 +377,8 @@ class TestDiscriminatorDetection:
                 with patch.object(orch, "_parse_messages", return_value=batch2):
                     orch._process_topic_batch("buf-topic", [(None, b"d")] * 4)
 
-        # Buffer should contain records from both batches
-        assert len(orch._disc_record_buffer["buf-topic"]) == 7
+        # Buffer is cleaned after first detection attempt (no longer accumulates)
+        assert "buf-topic" not in orch._disc_record_buffer
 
     @patch("schema_infer.plugin.live.ParserFactory")
     def test_stops_checking_after_discriminator_found(self, mock_parser_factory):

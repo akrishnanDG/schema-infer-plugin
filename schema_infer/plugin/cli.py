@@ -375,33 +375,50 @@ def infer(
                 sys.exit(1)
         elif data_file:
             try:
-                content = data_file.read_text(encoding="utf-8")
-                try:
-                    parsed = _json.loads(content)
-                    if isinstance(parsed, dict):
-                        records = [parsed]
-                    elif isinstance(parsed, list):
-                        records = [item for item in parsed if isinstance(item, dict)]
-                    else:
+                # Try streaming JSONL first (memory-efficient for large files)
+                # If first line is '[' or '{' with no newlines, fall back to full parse
+                with open(data_file, "r", encoding="utf-8") as f:
+                    first_line = f.readline().strip()
+
+                if first_line.startswith("["):
+                    # JSON array — must load fully, but check size first
+                    file_size = data_file.stat().st_size
+                    if file_size > 500 * 1024 * 1024:  # 500MB limit
                         click.echo(
-                            f"Error: --data-file must contain a JSON object or array of objects",
+                            f"Error: --data-file is {file_size // (1024*1024)}MB, "
+                            f"max 500MB. Use JSONL format (one object per line) for large files.",
                             err=True,
                         )
                         sys.exit(1)
-                except _json.JSONDecodeError:
-                    # Try JSONL (one JSON object per line)
+                    content = data_file.read_text(encoding="utf-8")
+                    parsed = _json.loads(content)
+                    if isinstance(parsed, list):
+                        records = [item for item in parsed if isinstance(item, dict)]
+                    elif isinstance(parsed, dict):
+                        records = [parsed]
+                    else:
+                        click.echo(
+                            "Error: --data-file must contain a JSON object or array",
+                            err=True,
+                        )
+                        sys.exit(1)
+                else:
+                    # JSONL format — stream line by line (memory-efficient)
                     records = []
-                    for line_num, line in enumerate(content.strip().splitlines(), 1):
-                        line = line.strip()
-                        if line:
-                            parsed_line = _json.loads(line)
-                            if isinstance(parsed_line, dict):
-                                records.append(parsed_line)
+                    if first_line:
+                        parsed_first = _json.loads(first_line)
+                        if isinstance(parsed_first, dict):
+                            records.append(parsed_first)
+                    with open(data_file, "r", encoding="utf-8") as f:
+                        next(f)  # skip first line (already parsed)
+                        for line_num, line in enumerate(f, 2):
+                            line = line.strip()
+                            if line:
+                                parsed_line = _json.loads(line)
+                                if isinstance(parsed_line, dict):
+                                    records.append(parsed_line)
             except _json.JSONDecodeError as e:
-                click.echo(
-                    f"Error: Invalid JSON in {data_file} at line {line_num}: {e}",
-                    err=True,
-                )
+                click.echo(f"Error: Invalid JSON in {data_file}: {e}", err=True)
                 sys.exit(1)
             except Exception as e:
                 click.echo(f"Error: Failed to read {data_file}: {e}", err=True)
@@ -467,10 +484,10 @@ def infer(
         )
         sys.exit(1)
 
-    # Validate input parameters
+    # Validate input parameters — check for regex patterns that suggest
+    # the user meant --topic-pattern instead of --topics
     if topics and any(
-        pattern in topics
-        for pattern in [".*", "^", "$", "+", "*", "?", "[", "]", "(", ")"]
+        pattern in topics for pattern in [".*", "^$", ".+", "\\d", "\\w"]
     ):
         click.echo(
             "Error: Regex patterns like '.*' should be used with --topic-pattern, not --topics",

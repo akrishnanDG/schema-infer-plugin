@@ -46,6 +46,8 @@ class AvroGenerator(BaseSchemaGenerator):
 
     def generate(self, schema: InferredSchema) -> str:
         """Generate Avro schema."""
+        if not schema.fields:
+            self.logger.warning(f"Schema '{schema.name}' has no fields")
 
         # Sanitize the record name for Avro compatibility
         sanitized_name = self._sanitize_avro_name(schema.name)
@@ -355,6 +357,8 @@ class ProtobufGenerator(BaseSchemaGenerator):
 
     def generate(self, schema: InferredSchema) -> str:
         """Generate Protobuf schema."""
+        if not schema.fields:
+            self.logger.warning(f"Schema '{schema.name}' has no fields")
 
         lines = []
 

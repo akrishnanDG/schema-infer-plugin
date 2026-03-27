@@ -155,7 +155,7 @@ class IncrementalSchemaState:
                     "examples": set(),
                 }
 
-            state.total_records_processed = 1  # Mark as having some data
+            state.total_records_processed = 0  # Seeded from SR, not from actual records
             state.dirty = True
             state.logger.info(
                 f"Seeded state for '{topic_name}' from existing schema "

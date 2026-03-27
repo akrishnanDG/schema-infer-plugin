@@ -183,7 +183,10 @@ class TopicDiscovery:
             # Guard against overly complex patterns
             if len(pattern) > 500:
                 raise ValidationError("Regex pattern too long (max 500 characters)")
-            regex = re.compile(pattern)
+            try:
+                regex = re.compile(pattern)
+            except re.error as e:
+                raise ValidationError(f"Invalid regex pattern '{pattern}': {e}")
 
             with KafkaConsumer(self.config) as consumer:
                 all_topics = consumer.list_topics()

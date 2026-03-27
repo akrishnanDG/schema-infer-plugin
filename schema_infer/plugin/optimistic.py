@@ -956,6 +956,7 @@ class OptimisticProcessor:
             # Wait for assignment with balanced timeout
             assignment_timeout = 5
             start_time = time.time()
+            partitions = []
             self.logger.info(
                 f"Waiting for partition assignment for topic: {topic_name}"
             )

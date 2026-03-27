@@ -63,6 +63,14 @@ class SchemaRegistry:
         if config.schema_registry.ssl_ca_location:
             self.verify_ssl = config.schema_registry.ssl_ca_location
 
+        # Persistent session for connection pooling (reuses TCP/SSL connections)
+        self._session = requests.Session()
+        if self.auth:
+            self._session.auth = self.auth
+        if self.cert:
+            self._session.cert = self.cert
+        self._session.verify = self.verify_ssl
+
         self.logger.info(f"Initialized Schema Registry client for {self.base_url}")
 
         # Test connection on initialization
@@ -85,15 +93,12 @@ class SchemaRegistry:
         Returns:
             Response object
         """
-        kwargs.setdefault("auth", self.auth)
-        kwargs.setdefault("cert", self.cert)
-        kwargs.setdefault("verify", self.verify_ssl)
         kwargs.setdefault("timeout", (5, 30))
 
         last_exception = None
         for attempt in range(max_retries):
             try:
-                response = requests.request(method, url, **kwargs)
+                response = self._session.request(method, url, **kwargs)
                 response.raise_for_status()
                 return response
             except (
@@ -260,16 +265,26 @@ class SchemaRegistry:
         result = {}
         references = []
 
-        # Register sub-schemas first
+        # Register sub-schemas first. If a later sub-schema or the main schema
+        # fails, already-registered sub-schemas remain in SR (no rollback).
+        # This is logged so operators can identify orphaned schemas.
         for event_type, schema_content in sorted(schema_contents.items()):
             subject = f"{topic_name}-{event_type}"
-            schema_id = self.register_schema(
-                topic_name,
-                schema_content,
-                schema_format,
-                subject_override=subject,
-                skip_compatibility_set=skip_compatibility_set,
-            )
+            try:
+                schema_id = self.register_schema(
+                    topic_name,
+                    schema_content,
+                    schema_format,
+                    subject_override=subject,
+                    skip_compatibility_set=skip_compatibility_set,
+                )
+            except Exception as e:
+                if result:
+                    self.logger.warning(
+                        f"Partial multi-event registration: {len(result)} sub-schemas "
+                        f"already registered ({list(result.keys())}), failed on '{subject}': {e}"
+                    )
+                raise
             result[subject] = schema_id
             # Get actual version after registration for accurate references
             try:

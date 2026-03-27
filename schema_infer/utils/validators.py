@@ -193,24 +193,35 @@ def _validate_avro_schema(schema_content: str) -> Tuple[bool, str]:
             if "type" not in field:
                 return False, f"Avro field '{field.get('name', i)}' missing 'type'"
 
-            # Check for invalid standalone type strings
+            # Validate field type (string, list/union, or complex dict)
             field_type = field["type"]
+            valid_primitives = {
+                "null",
+                "boolean",
+                "int",
+                "long",
+                "float",
+                "double",
+                "bytes",
+                "string",
+            }
             if isinstance(field_type, str):
-                valid_types = {
-                    "null",
-                    "boolean",
-                    "int",
-                    "long",
-                    "float",
-                    "double",
-                    "bytes",
-                    "string",
-                }
-                if field_type not in valid_types:
+                if field_type not in valid_primitives:
                     return (
                         False,
                         f"Avro field '{field['name']}' has invalid type '{field_type}'. Must be a primitive type or a {{\"type\": ...}} definition",
                     )
+            elif isinstance(field_type, list):
+                # Union type like ["null", "string"] — validate each element
+                for union_elem in field_type:
+                    if (
+                        isinstance(union_elem, str)
+                        and union_elem not in valid_primitives
+                    ):
+                        return (
+                            False,
+                            f"Avro field '{field['name']}' has invalid union element '{union_elem}'",
+                        )
 
     return True, ""
 

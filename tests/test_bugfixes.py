@@ -876,7 +876,7 @@ class TestSRErrorDifferentiation:
         with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
-        with patch("requests.request") as mock_request:
+        with patch("requests.Session.request") as mock_request:
             mock_request.return_value = MagicMock()
             mock_request.return_value.raise_for_status.side_effect = (
                 requests.exceptions.HTTPError(response=response)
@@ -907,7 +907,7 @@ class TestSRErrorDifferentiation:
         with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
-        with patch("requests.request") as mock_request:
+        with patch("requests.Session.request") as mock_request:
             mock_request.return_value = response
             with pytest.raises(SchemaRegistryError, match="Auth failed"):
                 registry.register_schema("topic", "{}", "json-schema")
@@ -929,7 +929,7 @@ class TestRegistryRetryOnGET:
         success_response.raise_for_status.return_value = None
         success_response.json.return_value = {"id": 1}
 
-        with patch("requests.request") as mock_req:
+        with patch("requests.Session.request") as mock_req:
             # Fail twice, succeed on third
             mock_req.side_effect = [
                 requests.exceptions.ConnectionError("Connection refused"),
@@ -951,7 +951,7 @@ class TestRegistryRetryOnGET:
         with patch.object(SchemaRegistry, "_test_connection"):
             registry = SchemaRegistry(config)
 
-        with patch("requests.request") as mock_req:
+        with patch("requests.Session.request") as mock_req:
             mock_req.side_effect = requests.exceptions.ConnectionError(
                 "Connection refused"
             )

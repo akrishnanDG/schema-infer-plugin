@@ -285,16 +285,35 @@ class LiveConsumer:
         return dict(topic_messages)
 
     def commit(self) -> None:
-        """Synchronous offset commit."""
+        """Synchronous offset commit.
+
+        Raises:
+            LiveModeError: On critical commit failures (auth, coordinator errors).
+        """
         if not self.consumer:
             raise LiveModeError("Consumer not initialized")
         try:
             self.consumer.commit(asynchronous=False)
             self.logger.debug("Offsets committed")
         except KafkaException as e:
-            # No offsets to commit is not an error
-            if "No offset stored" not in str(e):
-                self.logger.warning(f"Failed to commit offsets: {e}")
+            error_str = str(e)
+            # "No offset stored" is benign (no messages polled yet)
+            if "No offset stored" in error_str:
+                return
+            # Auth/coordinator errors are critical
+            if any(
+                kw in error_str
+                for kw in (
+                    "Authentication",
+                    "Authorization",
+                    "NOT_COORDINATOR",
+                    "REBALANCE",
+                )
+            ):
+                self.logger.error(f"Critical commit error: {e}")
+                raise LiveModeError(f"Commit failed: {e}")
+            # Other errors are warnings (transient, will retry next cycle)
+            self.logger.warning(f"Failed to commit offsets: {e}")
 
     def close(self) -> None:
         """Close the consumer gracefully."""

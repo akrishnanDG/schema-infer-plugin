@@ -418,7 +418,7 @@ class TestSeedFromJsonSchema:
         assert "name" in state.field_analysis
         assert "age" in state.field_analysis
         assert "active" in state.field_analysis
-        assert state.total_records_processed == 1
+        assert state.total_records_processed == 0  # Seeded from SR, not actual records
 
     def test_seeded_state_type_detection(self, config):
         """Seeded fields should have correct type counts."""

@@ -47,7 +47,7 @@ class StateStore:
                 dir=self.state_dir, suffix=".tmp", prefix="state_"
             )
             try:
-                with os.fdopen(fd, "w") as f:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(state_dict, f, indent=2)
                 os.replace(tmp_path, state_file)
             except Exception:
@@ -78,7 +78,7 @@ class StateStore:
             return None
 
         try:
-            with open(state_file, "r") as f:
+            with open(state_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             state = IncrementalSchemaState.from_dict(data, config)
             self.logger.debug(
@@ -110,6 +110,14 @@ class StateStore:
         return sorted(topics)
 
     def _state_path(self, topic_name: str) -> Path:
-        """Get the state file path for a topic."""
+        """Get the state file path for a topic.
+
+        Uses a hash suffix to prevent collisions when different topic names
+        (e.g., 'topic-a.b' and 'topic_a.b') sanitize to the same filename.
+        """
+        import hashlib
+
         safe_name = re.sub(r"[^\w\-.]", "_", topic_name)
-        return self.state_dir / f"{safe_name}.state.json"
+        # Append short hash to prevent collisions from sanitization
+        name_hash = hashlib.sha256(topic_name.encode()).hexdigest()[:8]
+        return self.state_dir / f"{safe_name}_{name_hash}.state.json"

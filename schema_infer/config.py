@@ -144,8 +144,10 @@ class SchemaRegistryConfig(BaseModel):
 class InferenceConfig(BaseModel):
     """Schema inference configuration."""
 
-    max_messages: int = Field(default=50, description="Maximum messages to sample")
-    timeout: int = Field(default=20, description="Consumer timeout in seconds")
+    max_messages: int = Field(
+        default=50, ge=1, description="Maximum messages to sample"
+    )
+    timeout: int = Field(default=20, ge=1, description="Consumer timeout in seconds")
     auto_detect_format: bool = Field(
         default=True, description="Auto-detect data format"
     )
@@ -153,15 +155,18 @@ class InferenceConfig(BaseModel):
         default=None, description="Force specific data format"
     )
     confidence_threshold: float = Field(
-        default=0.8, description="Confidence threshold for format detection"
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold for format detection",
     )
     sample_size: int = Field(
-        default=100, description="Sample size for format detection"
+        default=100, ge=1, description="Sample size for format detection"
     )
     enable_nested_objects: bool = Field(
         default=True, description="Enable nested object inference"
     )
-    max_depth: int = Field(default=10, description="Maximum nesting depth")
+    max_depth: int = Field(default=10, ge=1, description="Maximum nesting depth")
     array_handling: str = Field(
         default="union", description="Array handling strategy: union, first, all"
     )
@@ -170,14 +175,32 @@ class InferenceConfig(BaseModel):
         description="Null handling strategy: optional, required, ignore",
     )
 
+    @field_validator("array_handling")
+    @classmethod
+    def validate_array_handling(cls, v):
+        valid = {"union", "first", "all"}
+        if v not in valid:
+            raise ValueError(f"array_handling must be one of {valid}, got '{v}'")
+        return v
+
+    @field_validator("null_handling")
+    @classmethod
+    def validate_null_handling(cls, v):
+        valid = {"optional", "required", "ignore"}
+        if v not in valid:
+            raise ValueError(f"null_handling must be one of {valid}, got '{v}'")
+        return v
+
 
 class PerformanceConfig(BaseModel):
     """Performance and optimization configuration."""
 
     background: bool = Field(default=False, description="Run in background mode")
-    max_workers: int = Field(default=4, description="Maximum number of worker threads")
-    batch_size: int = Field(default=100, description="Batch size for processing")
-    memory_limit_mb: int = Field(default=512, description="Memory limit in MB")
+    max_workers: int = Field(
+        default=4, ge=1, description="Maximum number of worker threads"
+    )
+    batch_size: int = Field(default=100, ge=1, description="Batch size for processing")
+    memory_limit_mb: int = Field(default=512, ge=1, description="Memory limit in MB")
     enable_caching: bool = Field(default=True, description="Enable result caching")
     cache_ttl: int = Field(default=3600, description="Cache TTL in seconds")
     show_progress: bool = Field(

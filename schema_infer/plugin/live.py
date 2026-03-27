@@ -444,15 +444,15 @@ class LiveModeOrchestrator:
         if self.schema_format == "json-schema":
             with self._metadata_lock:
                 cached_disc = self._topic_discriminators.get(topic_name, _SENTINEL)
-                # Buffer records for detection until a discriminator is found
-                if cached_disc is _SENTINEL or cached_disc is None:
+                # Buffer records for detection only on first encounter (SENTINEL)
+                if cached_disc is _SENTINEL:
                     buf = self._disc_record_buffer.get(topic_name, [])
                     buf.extend(parsed_records)
                     if len(buf) > 200:
                         buf = buf[-200:]
                     self._disc_record_buffer[topic_name] = buf
 
-            if cached_disc is _SENTINEL or cached_disc is None:
+            if cached_disc is _SENTINEL:
                 from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
 
                 analyzer = SchemaAnalyzer(
@@ -468,7 +468,8 @@ class LiveModeOrchestrator:
                     self._topic_discriminators[topic_name] = disc
                     if disc:
                         self._topic_event_types[topic_name] = set()
-                        self._disc_record_buffer.pop(topic_name, None)
+                    # Always clean buffer after detection attempt to prevent unbounded growth
+                    self._disc_record_buffer.pop(topic_name, None)
                 if disc:
                     click.echo(
                         f"[{_ts()}] {topic_name}: Detected discriminator field '{disc}'"
@@ -555,7 +556,12 @@ class LiveModeOrchestrator:
         # Group records by event type
         groups: Dict[str, List[Dict[str, Any]]] = {}
         for record in parsed_records:
-            event_type = str(record.get(discriminator, "_unknown"))
+            raw_val = record.get(discriminator)
+            event_type = (
+                str(raw_val)
+                if raw_val is not None and str(raw_val).strip()
+                else "_unknown"
+            )
             if event_type not in groups:
                 groups[event_type] = []
             groups[event_type].append(record)
@@ -1159,6 +1165,11 @@ class LiveModeOrchestrator:
                     states_to_persist.append((topic_name, state))
                 del self._states[topic_name]
                 self.logger.debug(f"Evicted idle state for {topic_name}")
+
+        # Clean activity metadata for evicted topics
+        with self._metadata_lock:
+            for topic_name in to_evict:
+                self._topic_last_activity.pop(topic_name, None)
 
         # Persist outside lock (I/O)
         for topic_name, state in states_to_persist:

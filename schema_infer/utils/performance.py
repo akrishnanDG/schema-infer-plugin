@@ -36,6 +36,9 @@ class PerformanceMonitor:
             self.metrics[operation] = []
 
         self.metrics[operation].append(duration)
+        # Cap at 10000 entries to prevent unbounded memory growth in long-running processes
+        if len(self.metrics[operation]) > 10000:
+            self.metrics[operation] = self.metrics[operation][-5000:]
         del self.start_times[operation]
 
         return duration

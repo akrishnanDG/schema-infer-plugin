@@ -128,7 +128,7 @@ class TestSchemaRegistry:
         registry = SchemaRegistry(self.config)
         assert registry is not None
 
-    @patch("schema_infer.core.registry.requests.request")
+    @patch("schema_infer.core.registry.requests.Session.request")
     @patch("schema_infer.core.registry.requests.get")
     def test_register_schema_success(self, mock_get, mock_request):
         """Test successful schema registration."""
@@ -151,7 +151,7 @@ class TestSchemaRegistry:
         assert result == 1
         mock_request.assert_called()
 
-    @patch("schema_infer.core.registry.requests.request")
+    @patch("schema_infer.core.registry.requests.Session.request")
     @patch("schema_infer.core.registry.requests.get")
     def test_register_schema_failure(self, mock_get, mock_request):
         """Test schema registration failure."""
@@ -753,7 +753,7 @@ class TestSchemaRegistryMethods:
         result = registry.delete_subject("test-subject")
         assert result == [1, 2]
 
-    @patch("schema_infer.core.registry.requests.request")
+    @patch("schema_infer.core.registry.requests.Session.request")
     @patch("schema_infer.core.registry.requests.get")
     def test_check_compatibility(self, mock_get, mock_request):
         """Test checking schema compatibility."""

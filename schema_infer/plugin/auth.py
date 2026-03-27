@@ -260,7 +260,7 @@ class AuthenticationManager:
         if environment == "cloud":
             api_key = self._get_cloud_api_key()
             info["has_api_key"] = bool(api_key)
-            info["api_key_prefix"] = api_key[:8] + "..." if api_key else None
+            info["api_key_hint"] = api_key[:4] + "****" if api_key else None
         else:
             info["security_protocol"] = self.config.kafka.security_protocol
             info["sasl_mechanism"] = self.config.kafka.sasl_mechanism

@@ -78,7 +78,7 @@ class JSONParser(BaseParser):
         """Parse JSON message."""
 
         try:
-            text = message.decode("utf-8").strip()
+            text = message.decode("utf-8", errors="replace").strip()
             if not text:
                 return None
 
@@ -110,10 +110,10 @@ class JSONParser(BaseParser):
         """Check if message is valid JSON."""
 
         try:
-            text = message.decode("utf-8").strip()
+            text = message.decode("utf-8", errors="replace").strip()
             json.loads(text)
             return True
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError):
             return False
 
 
