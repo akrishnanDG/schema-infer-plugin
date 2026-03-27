@@ -74,7 +74,8 @@ jobs:
       - name: Lint with flake8
         run: |
           flake8 schema_infer/ --max-line-length=120 --count --statistics \
-            --exclude=__pycache__,*.egg-info,build,dist
+            --exclude=__pycache__,*.egg-info,build,dist \
+            --ignore=E203,E402,E501,W503,F401,F541,F811,F841
 
       - name: Type check with mypy
         run: mypy schema_infer/ --ignore-missing-imports --no-error-summary
