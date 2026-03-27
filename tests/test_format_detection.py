@@ -2,16 +2,17 @@
 Comprehensive unit tests for format detection and parsing
 """
 
+from typing import Any, Dict, List
+
 import pytest
-from typing import List, Dict, Any
 
 from schema_infer.formats.detector import FormatDetector
 from schema_infer.formats.parsers import (
-    JSONParser,
     CSVParser,
+    JSONParser,
     KeyValueParser,
-    RawTextParser,
     ParserFactory,
+    RawTextParser,
 )
 
 

@@ -4,9 +4,10 @@ Schema Registry integration for Schema Inference Plugin
 
 import json
 import time
-import requests
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
+
+import requests
 
 from ..config import Config
 from ..utils.exceptions import SchemaRegistryError

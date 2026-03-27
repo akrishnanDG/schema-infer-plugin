@@ -21,7 +21,9 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 os.environ.setdefault("KAFKA_LOG_LEVEL", "3")
 os.environ.setdefault("RDKAFKA_LOG_LEVEL", "3")
 
-from confluent_kafka import Consumer, KafkaError as ConfluentKafkaError, KafkaException
+from confluent_kafka import Consumer
+from confluent_kafka import KafkaError as ConfluentKafkaError
+from confluent_kafka import KafkaException
 
 from ..config import Config
 from ..utils.exceptions import LiveModeError

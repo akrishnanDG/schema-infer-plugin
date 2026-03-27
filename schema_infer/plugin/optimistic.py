@@ -4,9 +4,9 @@ Optimistic message processing for schema inference
 
 import os
 import sys
+import threading
 import time
 import uuid
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -15,7 +15,9 @@ os.environ["KAFKA_LOG_LEVEL"] = "3"
 os.environ["RDKAFKA_LOG_LEVEL"] = "3"
 
 import confluent_kafka
-from confluent_kafka import Consumer, KafkaError as ConfluentKafkaError, KafkaException
+from confluent_kafka import Consumer
+from confluent_kafka import KafkaError as ConfluentKafkaError
+from confluent_kafka import KafkaException
 from tqdm import tqdm
 
 from ..config import Config

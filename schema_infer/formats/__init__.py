@@ -3,7 +3,7 @@ Data format detection and parsing modules
 """
 
 from .detector import FormatDetector
-from .parsers import JSONParser, CSVParser, KeyValueParser, TSVParser, BaseParser
+from .parsers import BaseParser, CSVParser, JSONParser, KeyValueParser, TSVParser
 
 __all__ = [
     "FormatDetector",

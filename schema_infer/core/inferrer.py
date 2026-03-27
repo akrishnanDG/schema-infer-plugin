@@ -2,20 +2,20 @@
 Main schema inference engine that coordinates all components
 """
 
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import time
 
 from ..config import Config
 from ..formats.detector import FormatDetector
-from ..formats.parsers import ParserFactory, BaseParser
+from ..formats.parsers import BaseParser, ParserFactory
+from ..schemas.generators import BaseSchemaGenerator, SchemaGeneratorFactory
 from ..schemas.inference import (
-    SchemaInferrer as SchemaAnalyzer,
-    InferredSchema,
     FieldType,
+    InferredSchema,
 )
-from ..schemas.generators import SchemaGeneratorFactory, BaseSchemaGenerator
+from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
 from ..utils.exceptions import InferenceError
 from ..utils.logger import get_logger
 
@@ -572,7 +572,7 @@ class SchemaInferrer:
             InferredSchema object
         """
 
-        from ..schemas.inference import InferredSchema, SchemaField, FieldType
+        from ..schemas.inference import FieldType, InferredSchema, SchemaField
 
         # Extract fields
         fields = []

@@ -2,10 +2,11 @@
 Pytest configuration and fixtures for comprehensive testing
 """
 
-import pytest
-import tempfile
 import os
-from typing import Dict, Any
+import tempfile
+from typing import Any, Dict
+
+import pytest
 
 from schema_infer.config import Config
 

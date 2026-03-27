@@ -3,15 +3,16 @@ Tests for multi-event schema detection, merging, and generation.
 """
 
 import json
-import pytest
 from collections import Counter
 from unittest.mock import MagicMock, patch
 
-from schema_infer.schemas.inference import SchemaInferrer
-from schema_infer.schemas.generators import JSONSchemaGenerator
-from schema_infer.core.merger import SchemaMerger
-from schema_infer.core.incremental import IncrementalSchemaState
+import pytest
+
 from schema_infer.config import Config
+from schema_infer.core.incremental import IncrementalSchemaState
+from schema_infer.core.merger import SchemaMerger
+from schema_infer.schemas.generators import JSONSchemaGenerator
+from schema_infer.schemas.inference import SchemaInferrer
 
 # ---------------------------------------------------------------------------
 # Test data fixtures

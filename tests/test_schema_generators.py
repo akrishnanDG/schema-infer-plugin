@@ -3,20 +3,21 @@ Comprehensive unit tests for schema generators (JSON Schema, Avro, Protobuf)
 """
 
 import json
-import pytest
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-from schema_infer.schemas.inference import (
-    SchemaInferrer,
-    InferredSchema,
-    SchemaField,
-    FieldType,
-)
+import pytest
+
 from schema_infer.schemas.generators import (
-    JSONSchemaGenerator,
     AvroGenerator,
+    JSONSchemaGenerator,
     ProtobufGenerator,
     SchemaGeneratorFactory,
+)
+from schema_infer.schemas.inference import (
+    FieldType,
+    InferredSchema,
+    SchemaField,
+    SchemaInferrer,
 )
 
 

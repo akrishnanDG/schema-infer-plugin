@@ -6,8 +6,8 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-from .inference import InferredSchema, SchemaField, FieldType
 from ..utils.logger import get_logger
+from .inference import FieldType, InferredSchema, SchemaField
 
 
 class BaseSchemaGenerator(ABC):

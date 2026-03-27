@@ -8,15 +8,17 @@ import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from confluent_kafka import Consumer, KafkaError as ConfluentKafkaError, KafkaException
+from confluent_kafka import Consumer
+from confluent_kafka import KafkaError as ConfluentKafkaError
+from confluent_kafka import KafkaException
 
 from ..config import Config
 from ..utils.exceptions import KafkaError
 from ..utils.logger import get_logger
 from ..utils.validators import (
-    validate_topic_name,
     validate_max_messages,
     validate_timeout,
+    validate_topic_name,
 )
 
 

@@ -5,8 +5,8 @@ Build: 2026-02-28
 """
 
 import logging
-import sys
 import os
+import sys
 import time
 from pathlib import Path
 from typing import List, Optional, Set
@@ -17,9 +17,9 @@ os.environ["RDKAFKA_LOG_LEVEL"] = "3"
 import click
 
 from ..config import Config, load_config
+from ..core.discovery import TopicDiscovery
 from ..core.inferrer import SchemaInferrer
 from ..core.registry import SchemaRegistry
-from ..core.discovery import TopicDiscovery
 from ..plugin.auth import AuthenticationManager
 from ..plugin.optimistic import OptimisticProcessor, SuppressTelemetry
 from ..utils.logger import setup_logging
@@ -513,8 +513,9 @@ def infer(
             # Parallel consumer processing for multiple topics
             click.echo(f"\nInferring schemas for {len(topic_list)} topics...")
 
-            from tqdm import tqdm
             import time
+
+            from tqdm import tqdm
 
             start_time = time.time()
 
@@ -619,9 +620,10 @@ def infer(
 
                 # Register schemas if requested
                 if register and registry:
-                    from concurrent.futures import ThreadPoolExecutor, as_completed
-                    from ..utils.validators import validate_generated_schema
                     import threading
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                    from ..utils.validators import validate_generated_schema
 
                     # Count total registrations needed
                     flat_schemas = results.get("schemas", {})
@@ -833,8 +835,9 @@ def infer(
             error_details = []  # Store detailed error information
 
             # Create progress bar for single topic processing
-            from tqdm import tqdm
             import time
+
+            from tqdm import tqdm
 
             start_time = time.time()
 

@@ -2,14 +2,15 @@
 Comprehensive unit tests for schema inference engine
 """
 
+from typing import Any, Dict, List
+
 import pytest
-from typing import List, Dict, Any
 
 from schema_infer.schemas.inference import (
-    SchemaInferrer,
+    FieldType,
     InferredSchema,
     SchemaField,
-    FieldType,
+    SchemaInferrer,
 )
 
 

@@ -12,8 +12,8 @@ Multi-instance scaling:
 """
 
 import signal
-import time
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -23,8 +23,8 @@ import click
 from ..config import Config
 from ..core.incremental import IncrementalSchemaState, SchemaChangeReport
 from ..core.live_consumer import LiveConsumer
-from ..core.state_store import StateStore
 from ..core.registry import SchemaRegistry
+from ..core.state_store import StateStore
 from ..formats.detector import FormatDetector
 from ..formats.parsers import ParserFactory
 from ..schemas.generators import SchemaGeneratorFactory
@@ -617,8 +617,8 @@ class LiveModeOrchestrator:
     ) -> None:
         """Generate and register multi-event schemas (sub-schemas + main oneOf)."""
         from ..core.inferrer import SchemaInferrer
-        from ..schemas.generators import JSONSchemaGenerator
         from ..core.merger import SchemaMerger
+        from ..schemas.generators import JSONSchemaGenerator
 
         inferrer = SchemaInferrer(self.config)
         json_gen = JSONSchemaGenerator()

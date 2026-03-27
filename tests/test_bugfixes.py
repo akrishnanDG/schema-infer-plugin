@@ -986,7 +986,10 @@ class TestConfigSyncFix:
 
     def test_load_config_syncs_automatically(self):
         """load_config should call sync_convenience_to_nested."""
-        import tempfile, os, yaml
+        import os
+        import tempfile
+
+        import yaml
 
         cfg = {
             "kafka": {"bootstrap_servers": "test:9092"},
@@ -996,8 +999,9 @@ class TestConfigSyncFix:
             yaml.dump(cfg, f)
             tmp = f.name
         try:
-            from schema_infer.config import load_config
             from pathlib import Path
+
+            from schema_infer.config import load_config
 
             config = load_config(Path(tmp))
             # The convenience override should be synced to nested kafka config
@@ -1030,6 +1034,7 @@ class TestLiveConsumerRebalanceSafety:
     def test_on_assign_callback_exception_safe(self):
         """on_assign should not crash if orchestrator callback raises."""
         from unittest.mock import MagicMock
+
         from schema_infer.core.live_consumer import LiveConsumer
 
         config = Config()
@@ -1077,7 +1082,7 @@ class TestBrokerErrorEscalation:
 
     def test_critical_errors_are_raised(self):
         """Critical broker errors should raise LiveModeError, not silently continue."""
-        from schema_infer.core.live_consumer import LiveConsumer, ConfluentKafkaError
+        from schema_infer.core.live_consumer import ConfluentKafkaError, LiveConsumer
         from schema_infer.utils.exceptions import LiveModeError
 
         config = Config()

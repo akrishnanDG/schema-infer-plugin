@@ -2,15 +2,16 @@
 Comprehensive unit tests for core components (consumer, registry, discovery)
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from confluent_kafka import KafkaError as ConfluentKafkaError
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+from unittest.mock import MagicMock, Mock, patch
 
-from schema_infer.core.consumer import KafkaConsumer
-from schema_infer.core.registry import SchemaRegistry
-from schema_infer.core.discovery import TopicDiscovery
+import pytest
+from confluent_kafka import KafkaError as ConfluentKafkaError
+
 from schema_infer.config import Config
+from schema_infer.core.consumer import KafkaConsumer
+from schema_infer.core.discovery import TopicDiscovery
+from schema_infer.core.registry import SchemaRegistry
 
 
 class TestKafkaConsumer:

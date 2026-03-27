@@ -8,13 +8,13 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from ..config import Config
 from ..schemas.inference import (
     FieldType,
     InferredSchema,
     SchemaField,
-    SchemaInferrer as SchemaAnalyzer,
 )
-from ..config import Config
+from ..schemas.inference import SchemaInferrer as SchemaAnalyzer
 from ..utils.logger import get_logger
 
 

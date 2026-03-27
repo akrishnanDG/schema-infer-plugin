@@ -6,15 +6,16 @@ discriminator detection, flat and multi-event batch processing,
 flat-to-multi-event transitions, and idle state eviction.
 """
 
-import time
 import threading
-import pytest
+import time
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import MagicMock, Mock, call, patch
+
+import pytest
 
 from schema_infer.config import Config
-from schema_infer.plugin.live import LiveModeOrchestrator
 from schema_infer.core.incremental import IncrementalSchemaState, SchemaChangeReport
+from schema_infer.plugin.live import LiveModeOrchestrator
 
 # ---------------------------------------------------------------------------
 # Helpers

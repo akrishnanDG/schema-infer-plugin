@@ -2,17 +2,17 @@
 Utility modules for Schema Inference Plugin
 """
 
-from .logger import setup_logging, get_logger
 from .exceptions import (
-    SchemaInferError,
-    KafkaError,
-    SchemaRegistryError,
     FormatDetectionError,
+    KafkaError,
+    SchemaInferError,
+    SchemaRegistryError,
 )
+from .logger import get_logger, setup_logging
 from .validators import (
-    validate_topic_name,
-    validate_schema_format,
     validate_data_format,
+    validate_schema_format,
+    validate_topic_name,
 )
 
 __all__ = [

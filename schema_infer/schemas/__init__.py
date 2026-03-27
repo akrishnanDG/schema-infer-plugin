@@ -4,11 +4,11 @@ Schema generation modules for different formats
 
 from .generators import (
     AvroGenerator,
-    ProtobufGenerator,
-    JSONSchemaGenerator,
     BaseSchemaGenerator,
+    JSONSchemaGenerator,
+    ProtobufGenerator,
 )
-from .inference import SchemaInferrer, FieldType, SchemaField, InferredSchema
+from .inference import FieldType, InferredSchema, SchemaField, SchemaInferrer
 
 __all__ = [
     "AvroGenerator",

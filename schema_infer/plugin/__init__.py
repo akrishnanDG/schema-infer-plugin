@@ -2,8 +2,8 @@
 CLI Plugin modules for Schema Inference
 """
 
-from .cli import main
 from .auth import AuthenticationManager
+from .cli import main
 from .optimistic import OptimisticProcessor
 
 __all__ = [
