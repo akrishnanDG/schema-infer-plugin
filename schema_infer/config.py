@@ -171,7 +171,9 @@ class Config(BaseModel):
     topic_filter: TopicFilterConfig = Field(default_factory=TopicFilterConfig, description="Topic filtering configuration")
     live: LiveConfig = Field(default_factory=LiveConfig, description="Live consumer mode configuration")
     
-    # Convenience properties for backward compatibility
+    # Convenience fields for backward compatibility and CLI overrides.
+    # These are NOT synced via validators (which had side-effect bugs).
+    # Instead, load_config() syncs them after construction.
     bootstrap_servers: str = Field(default="localhost:9092")
     schema_registry_url: str = Field(default="http://localhost:8081")
     log_level: str = Field(default="INFO")
@@ -180,80 +182,38 @@ class Config(BaseModel):
     auto_detect_format: bool = Field(default=True)
     forced_data_format: Optional[str] = Field(default=None)
     background: bool = Field(default=False)
-    
-    @field_validator("bootstrap_servers", mode="before")
-    @classmethod
-    def sync_bootstrap_servers(cls, v, info):
-        """Sync bootstrap_servers with kafka config."""
-        kafka = info.data.get("kafka")
-        if kafka is not None:
-            kafka.bootstrap_servers = v
-        return v
-
-    @field_validator("schema_registry_url", mode="before")
-    @classmethod
-    def sync_schema_registry_url(cls, v, info):
-        """Sync schema_registry_url with schema_registry config."""
-        schema_registry = info.data.get("schema_registry")
-        if schema_registry is not None:
-            schema_registry.url = v
-        return v
-
-    @field_validator("log_level", mode="before")
-    @classmethod
-    def sync_log_level(cls, v, info):
-        """Sync log_level with logging config."""
-        logging = info.data.get("logging")
-        if logging is not None:
-            logging.level = v
-        return v
-
-    @field_validator("max_messages", mode="before")
-    @classmethod
-    def sync_max_messages(cls, v, info):
-        """Sync max_messages with inference config."""
-        inference = info.data.get("inference")
-        if inference is not None:
-            inference.max_messages = v
-        return v
-
-    @field_validator("timeout", mode="before")
-    @classmethod
-    def sync_timeout(cls, v, info):
-        """Sync timeout with inference config."""
-        inference = info.data.get("inference")
-        if inference is not None:
-            inference.timeout = v
-        return v
-
-    @field_validator("auto_detect_format", mode="before")
-    @classmethod
-    def sync_auto_detect_format(cls, v, info):
-        """Sync auto_detect_format with inference config."""
-        inference = info.data.get("inference")
-        if inference is not None:
-            inference.auto_detect_format = v
-        return v
-
-    @field_validator("forced_data_format", mode="before")
-    @classmethod
-    def sync_forced_data_format(cls, v, info):
-        """Sync forced_data_format with inference config."""
-        inference = info.data.get("inference")
-        if inference is not None:
-            inference.forced_data_format = v
-        return v
-
-    @field_validator("background", mode="before")
-    @classmethod
-    def sync_background(cls, v, info):
-        """Sync background with performance config."""
-        performance = info.data.get("performance")
-        if performance is not None:
-            performance.background = v
-        return v
 
     model_config = {"validate_assignment": True}
+
+    def sync_nested_to_convenience(self) -> None:
+        """Sync nested config values up to convenience fields.
+
+        Call after constructing nested configs to keep convenience fields
+        consistent. Nested configs are the source of truth.
+        """
+        self.bootstrap_servers = self.kafka.bootstrap_servers
+        self.schema_registry_url = self.schema_registry.url
+        self.log_level = self.logging.level
+        self.max_messages = self.inference.max_messages
+        self.timeout = self.inference.timeout
+        self.auto_detect_format = self.inference.auto_detect_format
+        self.forced_data_format = self.inference.forced_data_format
+        self.background = self.performance.background
+
+    def sync_convenience_to_nested(self) -> None:
+        """Sync convenience fields down to nested config objects.
+
+        Call after modifying convenience fields (e.g., from CLI overrides)
+        to propagate changes into the nested configs.
+        """
+        self.kafka.bootstrap_servers = self.bootstrap_servers
+        self.schema_registry.url = self.schema_registry_url
+        self.logging.level = self.log_level
+        self.inference.max_messages = self.max_messages
+        self.inference.timeout = self.timeout
+        self.inference.auto_detect_format = self.auto_detect_format
+        self.inference.forced_data_format = self.forced_data_format
+        self.performance.background = self.background
 
 
 def load_config(config_path: Optional[Path] = None) -> Config:
@@ -319,24 +279,42 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     if "live" in merged_config:
         config.live = LiveConfig(**merged_config["live"])
     
-    # Update convenience properties
+    # First: sync nested configs up to convenience fields so they reflect
+    # whatever was loaded from the YAML (nested configs are source of truth)
+    config.sync_nested_to_convenience()
+
+    # Then: apply any top-level convenience overrides from the config file
+    # (these take precedence over nested values when explicitly set)
+    has_convenience_override = False
     if "bootstrap_servers" in merged_config:
         config.bootstrap_servers = merged_config["bootstrap_servers"]
+        has_convenience_override = True
     if "schema_registry_url" in merged_config:
         config.schema_registry_url = merged_config["schema_registry_url"]
+        has_convenience_override = True
     if "log_level" in merged_config:
         config.log_level = merged_config["log_level"]
+        has_convenience_override = True
     if "max_messages" in merged_config:
         config.max_messages = merged_config["max_messages"]
+        has_convenience_override = True
     if "timeout" in merged_config:
         config.timeout = merged_config["timeout"]
+        has_convenience_override = True
     if "auto_detect_format" in merged_config:
         config.auto_detect_format = merged_config["auto_detect_format"]
+        has_convenience_override = True
     if "forced_data_format" in merged_config:
         config.forced_data_format = merged_config["forced_data_format"]
+        has_convenience_override = True
     if "background" in merged_config:
         config.background = merged_config["background"]
-    
+        has_convenience_override = True
+
+    # Only sync convenience → nested if convenience overrides were explicitly set
+    if has_convenience_override:
+        config.sync_convenience_to_nested()
+
     return config
 
 

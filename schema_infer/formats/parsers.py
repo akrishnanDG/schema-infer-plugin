@@ -87,12 +87,11 @@ class JSONParser(BaseParser):
             # Convert to flat dictionary if it's a list
             if isinstance(data, list):
                 if data and isinstance(data[0], dict):
-                    # Merge all objects in the list
-                    result = {}
-                    for item in data:
-                        if isinstance(item, dict):
-                            result.update(item)
-                    return result
+                    # Return first dict element — each element is handled
+                    # individually by parse_batch via the caller.
+                    # Using dict.update() across elements would lose data
+                    # by overwriting keys from earlier elements.
+                    return data[0]
                 else:
                     return {"array": data}
             

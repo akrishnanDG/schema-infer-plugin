@@ -398,7 +398,7 @@ class ProtobufGenerator(BaseSchemaGenerator):
             lines.append(f'{indent}{message_name} {field_name} = {field_number};')
             field_number += 1
 
-            # Build sub-structure recursively
+            # Build sub-structure recursively — reset field numbers per message scope
             lines.append(f'{indent}message {message_name} {{')
             sub_structure = {"top_level_fields": {}, "nested_messages": {}}
             for nested_path, field in nested_list:
@@ -411,7 +411,7 @@ class ProtobufGenerator(BaseSchemaGenerator):
                     sub_structure["nested_messages"][sub_top].append((sub_rest, field))
                 else:
                     sub_structure["top_level_fields"][nested_path] = field
-            field_number = self._add_protobuf_fields(lines, sub_structure, field_number, indent + "  ")
+            self._add_protobuf_fields(lines, sub_structure, 1, indent + "  ")
             lines.append(f'{indent}}}')
 
         return field_number
@@ -461,7 +461,7 @@ class ProtobufGenerator(BaseSchemaGenerator):
             "boolean": "bool",
             "null": "string",
             "object": "string",
-            "array": "repeated",
+            "array": "string",  # Element type unknown; field_type.array adds "repeated" keyword
             "union": "string",
             "datetime": "string",  # Protobuf uses string for timestamps
             "date": "string",
@@ -470,7 +470,7 @@ class ProtobufGenerator(BaseSchemaGenerator):
         
         base_type = type_mapping.get(field_type.name, "string")
         
-        if field_type.array and base_type != "repeated":
+        if field_type.array:
             return f"repeated {base_type}"
         
         return base_type
@@ -529,6 +529,13 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
               - "{topic_name}" -> main oneOf schema JSON string
               - "{topic_name}.{event_type}" -> sub-schema JSON string per type
         """
+        if not event_schemas:
+            self.logger.warning(
+                f"No event schemas provided for multi-event topic '{topic_name}'. "
+                f"Returning empty result."
+            )
+            return {}
+
         result = {}
 
         # Generate individual sub-schemas
@@ -600,7 +607,8 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
                     "items": {
                         "type": "object",
                         "properties": child_props["properties"],
-                        "required": child_props["required"]
+                        "required": child_props["required"],
+                        "additionalProperties": False
                     }
                 }
                 if field.description:
@@ -616,12 +624,16 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
                 properties[top_level] = {
                     "type": "object",
                     "properties": {},
-                    "required": []
+                    "required": [],
+                    "additionalProperties": False
                 }
 
             nested_props = self._build_nested_structure(nested_list)
             properties[top_level]["properties"] = nested_props["properties"]
             properties[top_level]["required"] = nested_props["required"]
+            # Ensure closed content model on all object types
+            if "additionalProperties" not in properties[top_level]:
+                properties[top_level]["additionalProperties"] = False
 
         # Add remaining array child groups that don't have a parent top-level field
         for array_parent, children in array_child_fields.items():
@@ -632,7 +644,8 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
                     "items": {
                         "type": "object",
                         "properties": child_props["properties"],
-                        "required": child_props["required"]
+                        "required": child_props["required"],
+                        "additionalProperties": False
                     }
                 }
 
@@ -670,14 +683,13 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
                     required.append(field_name)
             elif nested_entries:
                 # Has children - create nested object (ignore leaf if exists)
+                nested_props = self._build_nested_structure(nested_entries)
                 properties[field_name] = {
                     "type": "object",
-                    "properties": {},
-                    "required": []
+                    "properties": nested_props["properties"],
+                    "required": nested_props["required"],
+                    "additionalProperties": False
                 }
-                nested_props = self._build_nested_structure(nested_entries)
-                properties[field_name]["properties"] = nested_props["properties"]
-                properties[field_name]["required"] = nested_props["required"]
         
         return {
             "properties": properties,
@@ -737,16 +749,20 @@ class JSONSchemaGenerator(BaseSchemaGenerator):
         base_type = type_mapping.get(field_type.name, "string")
         
         if field_type.array:
-            return {
+            array_schema = {
                 "type": "array",
                 "items": {"type": base_type}
             }
-        
+            # Nullable arrays need a union wrapper: [array-schema, "null"]
+            if field_type.nullable:
+                return {"type": ["array", "null"], "items": {"type": base_type}}
+            return array_schema
+
         if field_type.nullable and base_type != "null":
             return {
                 "type": [base_type, "null"]
             }
-        
+
         return {"type": base_type}
 
 

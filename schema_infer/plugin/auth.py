@@ -105,8 +105,13 @@ class AuthenticationManager:
             config['sasl.username'] = api_key
             config['sasl.password'] = api_secret
         else:
-            self.logger.warning("Schema Inference Cloud API key/secret not found in YAML config file")
-        
+            from ..utils.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "Cloud API key and secret are required for Confluent Cloud. "
+                "Set 'cloud_api_key' and 'cloud_api_secret' under the 'kafka' "
+                "section in your config file."
+            )
+
         return config
     
     def _configure_platform_kafka_auth(self) -> Dict[str, Any]:

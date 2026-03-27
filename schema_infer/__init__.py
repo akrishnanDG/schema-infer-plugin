@@ -4,7 +4,7 @@ Schema Inference Plugin
 A powerful tool for automatically inferring schemas from Kafka topic data.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.4"
 __author__ = "Arun Krishnan"
 
 from .core.inferrer import SchemaInferrer

@@ -877,7 +877,7 @@ When registering schemas that already exist in Schema Registry, the tool deep-me
 
 - **New fields** are added to the existing schema
 - **Existing fields** are preserved (never removed or type-narrowed)
-- **Type conflicts**: existing type is kept to avoid `COMBINED_TYPE_SUBSCHEMAS_CHANGED` errors
+- **Type conflicts**: widened to union (e.g., `["string", "integer", "null"]`) to accept both types without data loss
 - **Nested objects**: recursively merged at each level of nesting
 - **Array items**: recursively merged — `items.properties` are deep-merged so nested fields inside arrays are preserved
 - **Unified numeric types**: all integers and floats are inferred as `number` to prevent compatibility errors when a field appears as `5` in one batch and `5.5` in another

@@ -154,7 +154,7 @@ schema-infer infer --topic orders --register --context my-team
 The tool merges with existing schemas in Schema Registry rather than replacing them:
 
 - New fields are added (existing fields are never removed)
-- Type conflicts preserve the existing type to avoid compatibility errors
+- Type conflicts widen to union (e.g., `["string", "integer", "null"]`) to preserve compatibility without data loss
 - Nested objects and array items are recursively deep-merged
 
 This means running inference multiple times against the same topic is safe — schemas only grow, never shrink.
@@ -361,7 +361,7 @@ Running inference multiple times is safe. The tool merges with existing schemas:
 
 1. Fetches the current schema from Schema Registry
 2. Deep-merges new fields into the existing schema
-3. Preserves existing field types (never narrows)
+3. Widens type conflicts to union (never narrows)
 4. Registers the merged result
 
 This means schemas evolve monotonically — they can gain fields but never lose them.
@@ -445,7 +445,7 @@ schema-infer infer --topic orders --timeout 60
 
 **Cause**: Different message samples produce different type inferences.
 
-**Fix**: The schema merger preserves the existing type when conflicts occur. Run inference with more records (`--max-messages 500`) for a more representative sample.
+**Fix**: The schema merger widens type conflicts to unions (e.g., `["string", "integer", "null"]`), so both types are accepted. Run inference with more records (`--max-messages 500`) for a more representative sample.
 
 ### 5. Live mode not registering schemas
 

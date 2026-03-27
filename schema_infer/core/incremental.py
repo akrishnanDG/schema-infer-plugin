@@ -2,6 +2,7 @@
 Incremental schema state management and change detection for live consumer mode.
 """
 
+import threading
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -90,6 +91,7 @@ class IncrementalSchemaState:
         self.last_updated: float = time.time()
         self.dirty: bool = False
         self.logger = get_logger(__name__)
+        self._lock = threading.Lock()  # Protects field_analysis and total_records_processed
 
         self.schema_analyzer = SchemaAnalyzer(
             confidence_threshold=config.inference.confidence_threshold,
@@ -169,32 +171,34 @@ class IncrementalSchemaState:
                 return self.last_schema
             raise ValueError("No records to merge and no existing schema")
 
-        # Analyze the new batch using the existing analyzer
+        # Analyze the new batch using the existing analyzer (CPU-bound, no lock needed)
         batch_analysis = self.schema_analyzer.analyze_fields(parsed_records)
 
-        # Merge into running state
-        self._merge_field_analysis(batch_analysis)
-        self.total_records_processed += len(parsed_records)
-        self.last_updated = time.time()
-        self.dirty = True
+        # Merge into running state and derive schema under lock
+        # to prevent concurrent modification of field_analysis and counters
+        with self._lock:
+            self._merge_field_analysis(batch_analysis)
+            self.total_records_processed += len(parsed_records)
+            self.last_updated = time.time()
+            self.dirty = True
 
-        # Re-derive schema from merged state
-        # All fields are marked optional and nullable in live mode to
-        # ensure backward-compatible schema evolution. In streaming data
-        # you can never guarantee a field will always be present --
-        # producers change, bugs happen, different versions coexist.
-        fields = []
-        for field_name, analysis in self.field_analysis.items():
-            schema_field = self.schema_analyzer.create_schema_field(field_name, analysis)
-            if schema_field:
-                schema_field.required = False
-                if not schema_field.field_type.nullable:
-                    schema_field.field_type = FieldType(
-                        schema_field.field_type.name,
-                        nullable=True,
-                        array=schema_field.field_type.array,
-                    )
-                fields.append(schema_field)
+            # Re-derive schema from merged state
+            # All fields are marked optional and nullable in live mode to
+            # ensure backward-compatible schema evolution. In streaming data
+            # you can never guarantee a field will always be present --
+            # producers change, bugs happen, different versions coexist.
+            fields = []
+            for field_name, analysis in list(self.field_analysis.items()):
+                schema_field = self.schema_analyzer.create_schema_field(field_name, analysis)
+                if schema_field:
+                    schema_field.required = False
+                    if not schema_field.field_type.nullable:
+                        schema_field.field_type = FieldType(
+                            schema_field.field_type.name,
+                            nullable=True,
+                            array=schema_field.field_type.array,
+                        )
+                    fields.append(schema_field)
 
         fields.sort(key=lambda f: f.name)
 

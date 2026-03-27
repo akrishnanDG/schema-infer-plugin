@@ -43,10 +43,16 @@ class SchemaMerger:
         """
         try:
             existing = json.loads(existing_schema_json)
+        except (json.JSONDecodeError, TypeError):
+            self.logger.warning("Could not parse existing schema, starting fresh")
+            existing = {"type": "object", "properties": {}}
+
+        try:
             new = json.loads(new_schema_json)
         except (json.JSONDecodeError, TypeError):
-            # If we can't parse existing, just use new
-            return new_schema_json
+            # If we can't parse the new schema, keep existing intact
+            self.logger.warning("Could not parse new schema, keeping existing")
+            return existing_schema_json
 
         # If existing is a oneOf (multi-event) schema, don't merge flat into it
         if "oneOf" in existing:
@@ -108,8 +114,12 @@ class SchemaMerger:
             existing_type = self._extract_primary_type(existing_def)
             new_type = self._extract_primary_type(new_def)
 
-            # Different types: keep existing to avoid compatibility errors
+            # Different types: widen to union (both types become nullable)
+            # to preserve compatibility while not losing the new type info
             if existing_type and new_type and existing_type != new_type:
+                # Build a deduplicated union type that accepts both — keeps schema additive
+                union_types = list(dict.fromkeys([existing_type, new_type, "null"]))
+                merged[field_name] = {"type": union_types}
                 continue
 
             # Both are objects with properties: deep merge
@@ -143,6 +153,12 @@ class SchemaMerger:
                     merged_items = dict(existing_items)
                     merged_items["properties"] = merged_item_props
                     merged_def["items"] = merged_items
+                elif isinstance(existing_items, dict) and "properties" in existing_items:
+                    # Existing has nested properties but new doesn't — keep existing (never destructive)
+                    pass
+                elif isinstance(new_items, dict) and "properties" in new_items:
+                    # New has nested properties but existing doesn't — adopt new structure
+                    merged_def["items"] = dict(new_items)
 
                 # Array of primitives: keep existing item type
                 merged[field_name] = merged_def
@@ -154,16 +170,24 @@ class SchemaMerger:
 
     @staticmethod
     def _extract_primary_type(field_def: Any) -> str:
-        """Extract the primary (non-null) type from a field definition."""
+        """Extract the primary (non-null) type from a field definition.
+
+        Returns the single non-null type for simple nullable types like
+        ["string", "null"]. Returns empty string for multi-type unions
+        like ["string", "integer", "null"] to avoid false matches during
+        merge comparison.
+        """
         if not isinstance(field_def, dict):
             return ""
         field_type = field_def.get("type", "")
         if isinstance(field_type, str):
             return field_type
         if isinstance(field_type, list):
-            for t in field_type:
-                if t != "null":
-                    return t
+            non_null_types = [t for t in field_type if t != "null"]
+            if len(non_null_types) == 1:
+                return non_null_types[0]
+            # Multi-type union: return empty to prevent false type matching
+            return ""
         return ""
 
     def merge_multi_event_schemas(
@@ -272,6 +296,11 @@ class SchemaMerger:
                 result = registry.get_latest_schema(subject)
                 if result and "schema" in result:
                     existing[event_type] = result["schema"]
-            except Exception:
-                pass
+            except Exception as e:
+                # 404 is expected (schema doesn't exist yet), log others as warnings
+                error_str = str(e)
+                if "404" in error_str or "40401" in error_str:
+                    self.logger.debug(f"No existing sub-schema for {subject}")
+                else:
+                    self.logger.warning(f"Failed to fetch sub-schema for {subject}: {e}")
         return existing

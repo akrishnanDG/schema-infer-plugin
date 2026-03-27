@@ -435,7 +435,7 @@ Generated JSON Schemas use a closed content model (`additionalProperties: false`
 When merging with existing schemas in Schema Registry:
 - **New fields** are added to the existing schema
 - **Existing fields** are preserved (never removed or narrowed)
-- **Type conflicts**: existing type is kept to avoid compatibility errors
+- **Type conflicts**: widened to union (e.g., `["string", "integer", "null"]`) to accept both types
 - **Nested objects**: recursively deep-merged at each level
 - **Array items**: recursively merged -- `items.properties` are deep-merged to prevent `COMBINED_TYPE_SUBSCHEMAS_CHANGED` errors
 - The existing schema is always used as the base, ensuring no existing types or structures are overwritten

@@ -123,20 +123,20 @@ class TestSchemaRegistry:
         registry = SchemaRegistry(self.config)
         assert registry is not None
     
-    @patch('schema_infer.core.registry.requests.post')
+    @patch('schema_infer.core.registry.requests.request')
     @patch('schema_infer.core.registry.requests.get')
-    def test_register_schema_success(self, mock_get, mock_post):
+    def test_register_schema_success(self, mock_get, mock_request):
         """Test successful schema registration."""
         # Mock the connection test GET request
         mock_get_response = Mock()
         mock_get_response.raise_for_status.return_value = None
         mock_get.return_value = mock_get_response
 
-        # Mock the POST request for schema registration
-        mock_post_response = Mock()
-        mock_post_response.json.return_value = {"id": 1}
-        mock_post_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_post_response
+        # Mock the requests.request call (used by _request_with_retry)
+        mock_req_response = Mock()
+        mock_req_response.json.return_value = {"id": 1}
+        mock_req_response.raise_for_status.return_value = None
+        mock_request.return_value = mock_req_response
 
         registry = SchemaRegistry(self.config)
 
@@ -144,18 +144,18 @@ class TestSchemaRegistry:
         result = registry.register_schema("test-topic", schema_content, "avro")
 
         assert result == 1
-        mock_post.assert_called_once()
-    
-    @patch('schema_infer.core.registry.requests.post')
+        mock_request.assert_called()
+
+    @patch('schema_infer.core.registry.requests.request')
     @patch('schema_infer.core.registry.requests.get')
-    def test_register_schema_failure(self, mock_get, mock_post):
+    def test_register_schema_failure(self, mock_get, mock_request):
         """Test schema registration failure."""
         # Mock the connection test GET request
         mock_get_response = Mock()
         mock_get_response.raise_for_status.return_value = None
         mock_get.return_value = mock_get_response
 
-        mock_post.side_effect = Exception("Registration failed")
+        mock_request.side_effect = Exception("Registration failed")
 
         registry = SchemaRegistry(self.config)
 
@@ -669,9 +669,9 @@ class TestSchemaRegistryMethods:
         result = registry.delete_subject("test-subject")
         assert result == [1, 2]
 
-    @patch('schema_infer.core.registry.requests.post')
+    @patch('schema_infer.core.registry.requests.request')
     @patch('schema_infer.core.registry.requests.get')
-    def test_check_compatibility(self, mock_get, mock_post):
+    def test_check_compatibility(self, mock_get, mock_request):
         """Test checking schema compatibility."""
         mock_get.return_value = MagicMock(status_code=200, json=lambda: [])
         mock_get.return_value.raise_for_status = MagicMock()
@@ -679,9 +679,10 @@ class TestSchemaRegistryMethods:
         from schema_infer.core.registry import SchemaRegistry
         registry = SchemaRegistry(self.config)
 
-        mock_post.return_value = MagicMock(status_code=200)
-        mock_post.return_value.json.return_value = {"is_compatible": True}
-        mock_post.return_value.raise_for_status = MagicMock()
+        compat_response = MagicMock(status_code=200)
+        compat_response.json.return_value = {"is_compatible": True}
+        compat_response.raise_for_status = MagicMock()
+        mock_request.return_value = compat_response
 
         result = registry.check_compatibility("test-subject", '{"type":"string"}')
         assert result == True

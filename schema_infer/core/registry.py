@@ -6,6 +6,7 @@ import json
 import time
 import requests
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from ..config import Config
 from ..utils.exceptions import SchemaRegistryError
@@ -52,9 +53,48 @@ class SchemaRegistry:
             self.verify_ssl = config.schema_registry.ssl_ca_location
         
         self.logger.info(f"Initialized Schema Registry client for {self.base_url}")
-        
+
         # Test connection on initialization
         self._test_connection()
+
+    def _request_with_retry(self, method: str, url: str, max_retries: int = 3, **kwargs) -> requests.Response:
+        """Execute an HTTP request with retry on transient errors.
+
+        Retries on ConnectionError and Timeout. Non-retryable errors
+        (4xx, 5xx HTTP responses) are raised immediately.
+
+        Args:
+            method: HTTP method (get, post, put, delete)
+            url: Request URL
+            max_retries: Number of retry attempts
+            **kwargs: Passed to requests.request()
+
+        Returns:
+            Response object
+        """
+        kwargs.setdefault("auth", self.auth)
+        kwargs.setdefault("cert", self.cert)
+        kwargs.setdefault("verify", self.verify_ssl)
+        kwargs.setdefault("timeout", (5, 30))
+
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                response = requests.request(method, url, **kwargs)
+                response.raise_for_status()
+                return response
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt
+                    self.logger.warning(
+                        f"Request failed ({type(e).__name__}), retrying in {wait}s "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait)
+                else:
+                    raise
+        raise last_exception  # type: ignore[misc]
     
     def register_schema(
         self,
@@ -96,31 +136,14 @@ class SchemaRegistry:
             if not skip_compatibility_set and self.config.schema_registry.compatibility != "NONE":
                 self._set_subject_compatibility(subject_name, self.config.schema_registry.compatibility)
 
-            url = f"{self.base_url}/subjects/{subject_name}/versions"
+            url = f"{self.base_url}/subjects/{self._encode_subject(subject_name)}/versions"
             self.logger.info(f"Registering schema for topic '{topic_name}' with subject '{subject_name}'")
 
-            # Retry with exponential backoff
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    response = requests.post(
-                        url,
-                        json=schema_data,
-                        auth=self.auth,
-                        cert=self.cert,
-                        verify=self.verify_ssl,
-                        headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
-                        timeout=(5, 30)
-                    )
-                    response.raise_for_status()
-                    break
-                except requests.exceptions.ConnectionError as e:
-                    if attempt < max_retries - 1:
-                        wait = 2 ** attempt
-                        self.logger.warning(f"Connection failed, retrying in {wait}s (attempt {attempt + 1}/{max_retries})")
-                        time.sleep(wait)
-                    else:
-                        raise
+            response = self._request_with_retry(
+                "post", url,
+                json=schema_data,
+                headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
+            )
 
             result = response.json()
             schema_id = result.get("id")
@@ -137,15 +160,28 @@ class SchemaRegistry:
                 self.logger.error(f"Schema Registry connection failed - DNS resolution error. Please check your Schema Registry URL: {self.base_url}")
                 raise SchemaRegistryError(f"Schema Registry URL not accessible: {self.base_url}. Please verify the URL in your configuration.")
             elif hasattr(e, 'response') and e.response is not None:
+                status = e.response.status_code
                 try:
                     error_details = e.response.json()
-                    error_code = error_details.get("error_code", e.response.status_code)
+                    error_code = error_details.get("error_code", status)
                     error_message = error_details.get("message", "Unknown error")
+                except (ValueError, KeyError):
+                    error_code = status
+                    error_message = f"HTTP {status}"
+
+                # Differentiated error messages by status code
+                if status == 409 or error_code == 40901:
+                    self.logger.error(f"Schema incompatible with existing version: {error_message}")
+                    raise SchemaRegistryError(f"Schema incompatible (error {error_code}): {error_message}")
+                elif status == 422 or error_code == 42201:
+                    self.logger.error(f"Invalid schema rejected by registry: {error_message}")
+                    raise SchemaRegistryError(f"Invalid schema (error {error_code}): {error_message}")
+                elif status in (401, 403):
+                    self.logger.error(f"Authentication/authorization failed: {error_message}")
+                    raise SchemaRegistryError(f"Auth failed (HTTP {status}): {error_message}. Check your API key and secret.")
+                else:
                     self.logger.error(f"Schema Registry error {error_code}: {error_message}")
                     raise SchemaRegistryError(f"Schema Registry error {error_code}: {error_message}")
-                except (ValueError, KeyError):
-                    self.logger.error(f"Failed to register schema: HTTP {e.response.status_code}")
-                    raise SchemaRegistryError(f"Failed to register schema: HTTP {e.response.status_code}")
             else:
                 self.logger.error(f"Failed to register schema: {e}")
                 raise SchemaRegistryError(f"Failed to register schema: {e}")
@@ -263,17 +299,8 @@ class SchemaRegistry:
         """
         
         try:
-            url = f"{self.base_url}/subjects/{subject}/versions"
-            
-            response = requests.get(
-                url,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
-                timeout=(5, 30)
-            )
-
-            response.raise_for_status()
+            url = f"{self.base_url}/subjects/{self._encode_subject(subject)}/versions"
+            response = self._request_with_retry("get", url)
             return response.json()
 
         except requests.exceptions.RequestException as e:
@@ -292,17 +319,8 @@ class SchemaRegistry:
         """
         
         try:
-            url = f"{self.base_url}/subjects/{subject}/versions/latest"
-            
-            response = requests.get(
-                url,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
-                timeout=(5, 30)
-            )
-
-            response.raise_for_status()
+            url = f"{self.base_url}/subjects/{self._encode_subject(subject)}/versions/latest"
+            response = self._request_with_retry("get", url)
             return response.json()
 
         except requests.exceptions.RequestException as e:
@@ -352,7 +370,7 @@ class SchemaRegistry:
         """
         
         try:
-            url = f"{self.base_url}/subjects/{subject}"
+            url = f"{self.base_url}/subjects/{self._encode_subject(subject)}"
             if permanent:
                 url += "?permanent=true"
             
@@ -393,9 +411,9 @@ class SchemaRegistry:
 
         try:
             if version is None:
-                url = f"{self.base_url}/compatibility/subjects/{subject}/versions/latest"
+                url = f"{self.base_url}/compatibility/subjects/{self._encode_subject(subject)}/versions/latest"
             else:
-                url = f"{self.base_url}/compatibility/subjects/{subject}/versions/{version}"
+                url = f"{self.base_url}/compatibility/subjects/{self._encode_subject(subject)}/versions/{version}"
 
             schema_data = {
                 "schema": schema_content
@@ -406,22 +424,20 @@ class SchemaRegistry:
                 registry_type = self._map_format_to_registry_type(schema_format)
                 schema_data["schemaType"] = registry_type
             
-            response = requests.post(
-                url,
+            response = self._request_with_retry(
+                "post", url,
                 json=schema_data,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
                 headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
-                timeout=(5, 30)
             )
-
-            response.raise_for_status()
             result = response.json()
 
             return result.get("is_compatible", False)
-            
+
         except requests.exceptions.RequestException as e:
+            # 422 means incompatible — return False instead of raising
+            if hasattr(e, 'response') and e.response is not None and e.response.status_code == 422:
+                self.logger.debug(f"Schema incompatible with {subject}")
+                return False
             self.logger.error(f"Failed to check compatibility: {e}")
             raise SchemaRegistryError(f"Failed to check compatibility: {e}")
     
@@ -438,10 +454,10 @@ class SchemaRegistry:
         
         try:
             if subject:
-                url = f"{self.base_url}/config/{subject}"
+                url = f"{self.base_url}/config/{self._encode_subject(subject)}"
             else:
                 url = f"{self.base_url}/config"
-            
+
             response = requests.get(
                 url,
                 auth=self.auth,
@@ -468,10 +484,10 @@ class SchemaRegistry:
         
         try:
             if subject:
-                url = f"{self.base_url}/config/{subject}"
+                url = f"{self.base_url}/config/{self._encode_subject(subject)}"
             else:
                 url = f"{self.base_url}/config"
-            
+
             response = requests.put(
                 url,
                 json=config_data,
@@ -528,11 +544,18 @@ class SchemaRegistry:
         
         mapping = {
             "avro": "AVRO",
-            "protobuf": "PROTOBUF", 
+            "protobuf": "PROTOBUF",
             "json-schema": "JSON"
         }
-        
-        return mapping.get(schema_format.lower(), "AVRO")
+
+        result = mapping.get(schema_format.lower())
+        if result is None:
+            self.logger.warning(
+                f"Unknown schema format '{schema_format}', defaulting to AVRO. "
+                f"Valid formats: {', '.join(mapping.keys())}"
+            )
+            return "AVRO"
+        return result
     
     def _set_subject_compatibility(self, subject: str, compatibility: str) -> None:
         """
@@ -543,8 +566,8 @@ class SchemaRegistry:
             compatibility: Compatibility level (NONE, BACKWARD, FORWARD, FULL, etc.)
         """
         try:
-            url = f"{self.base_url}/config/{subject}"
-            
+            url = f"{self.base_url}/config/{self._encode_subject(subject)}"
+
             compatibility_data = {
                 "compatibility": compatibility
             }
@@ -598,6 +621,11 @@ class SchemaRegistry:
         except Exception as e:
             self.logger.debug(f"Schema Registry connection test encountered unexpected error: {e}")
     
+    @staticmethod
+    def _encode_subject(subject: str) -> str:
+        """URL-encode a subject name for safe use in URL paths."""
+        return quote(subject, safe='')
+
     def _generate_subject_name(self, topic_name: str, schema_format: str) -> str:
         """
         Generate subject name based on the configured strategy and optional context.

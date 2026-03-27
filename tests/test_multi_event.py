@@ -256,7 +256,8 @@ class TestSchemaMerger:
             "additionalProperties": False
         })
         merged = json.loads(merger.merge_flat_schemas(existing, new))
-        assert merged["properties"]["a"]["type"] == "string"
+        # Type conflict now widens to union instead of silently keeping existing
+        assert merged["properties"]["a"]["type"] == ["string", "integer", "null"]
 
     def test_merge_flat_preserves_additional_properties_from_existing(self):
         """Should preserve additionalProperties from existing schema."""
@@ -297,11 +298,14 @@ class TestSchemaMerger:
         assert merged["additionalProperties"] is False
 
     def test_merge_flat_handles_invalid_existing(self):
-        """Should return new schema if existing can't be parsed."""
+        """Should merge new fields into empty base when existing can't be parsed."""
         merger = SchemaMerger()
         new_json = json.dumps({"type": "object", "properties": {"a": {"type": "string"}}})
         result = merger.merge_flat_schemas("invalid json", new_json)
-        assert result == new_json
+        merged = json.loads(result)
+        # With invalid existing, merger starts from empty and merges new fields in
+        assert merged["properties"]["a"]["type"] == "string"
+        assert merged["type"] == "object"
 
     def test_merge_flat_skips_oneof_existing(self):
         """Should not merge flat into an existing oneOf schema."""

@@ -6,7 +6,7 @@ You are the senior engineer on this project. You know every design decision, tra
 
 A CLI plugin that infers and generates schemas (JSON Schema, Avro, Protobuf) from Kafka topic data and registers them in Confluent Schema Registry. Think of it as **a Glue Crawler for Confluent Cloud** — it scans topics, detects structure and types, and produces schemas that Flink SQL, Tableflow, Connect, and ksqlDB can use.
 
-**Version**: 1.4.3 | **Python**: 3.9+ | **Tests**: 186 | **Lines**: ~10,400 source + 4,300 tests
+**Version**: 1.4.4 | **Python**: 3.9+ | **Tests**: 251 | **Lines**: ~10,500 source + 5,400 tests
 
 ## Architecture
 
@@ -50,7 +50,7 @@ All integers and floats are inferred as `number` (JSON Schema) / `double` (Avro/
 ### Schema Merging (Never Destructive)
 When merging with existing SR schemas:
 - New fields are added (existing fields are never removed)
-- Type conflicts preserve the existing type (never narrowed)
+- Type conflicts widen to union (e.g., `["string", "integer", "null"]`) — never narrows
 - Nested objects and array items are recursively deep-merged
 - Running inference multiple times is always safe — schemas only grow
 
@@ -136,7 +136,7 @@ schema-infer --config config.yaml live --topic-pattern ".*" --register --from-be
 
 ## Testing
 ```bash
-python3 -m pytest tests/ -q          # 186 tests
+python3 -m pytest tests/ -q          # 251 tests
 python3 -m pytest tests/ --cov       # Coverage report
 ```
 
@@ -148,6 +148,7 @@ Test files:
 - `test_schema_inference.py` — Type inference, nesting, arrays, nullability (17 tests)
 - `test_live_mode.py` — Partition ownership, rebalance, discriminator, transitions (27 tests)
 - `test_performance.py` — PerformanceMonitor, BatchProcessor, CacheManager, AsyncProcessor (33 tests)
+- `test_bugfixes.py` — Merger safety, closed content model, URL encoding, thread safety, config sync, error handling (65 tests)
 
 ## CI/CD
 - `.github/workflows/ci.yml` — Tests on Python 3.9-3.13, lint (black/isort/flake8/mypy), package build
@@ -156,13 +157,16 @@ Test files:
 
 ## Common Pitfalls
 1. **Don't use `>=` for deps** — use `~=` (compatible release) in requirements.txt and pyproject.toml
-2. **Don't mutate `self.config` from threads** — use `skip_compatibility_set` parameter instead
+2. **Don't mutate `self.config` from threads** — use `skip_compatibility_set` parameter instead. Config is deep-copied in `infer()` to prevent leaks.
 3. **Don't set `required` fields** — all fields must be optional for BACKWARD compat
-4. **Don't infer email/URI formats** — only `datetime` and `date` are detected (by design)
+4. **Don't infer email/URI formats** — only `datetime` (with timezone/fractional seconds) and `date` are detected (by design)
 5. **Don't use `except Exception: pass`** — always add `logger.debug()` at minimum
 6. **Test deps must support Python 3.9** — pytest 9.x requires 3.10+, use `>=7.0.0`
 7. **`macos-13` runners unavailable** — use `macos-latest` (arm64) for CI
-8. **SR error responses** — only log `error_code` and `message`, not full response body
+8. **SR error responses** — only log `error_code` and `message`, not full response body. Error codes 409, 422, 401/403 produce differentiated messages.
+9. **Config sync** — removed broken Pydantic validators; use `config.sync_convenience_to_nested()` / `config.sync_nested_to_convenience()` explicitly
+10. **Cloud auth fails early** — missing `cloud_api_key`/`cloud_api_secret` raises `ConfigurationError`, not a warning
+11. **`--message` validates input** — only JSON objects or arrays of objects accepted; primitives, strings, and null are rejected
 
 ## VARIANT Discussion Context
 VARIANT (Iceberg v3) is the long-term answer for semi-structured data, but Confluent doesn't support it today (not in Flink, Tableflow, Connect, or SR). This tool bridges the gap. With VARIANT, Schema Registry and governance are not required — it depends on whether you want to trade governance for flexibility. The positioning: "Schema inference is like a Glue Crawler for Confluent Cloud."

@@ -13,6 +13,7 @@ Multi-instance support:
 """
 
 import os
+import threading
 import time
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -47,6 +48,7 @@ class LiveConsumer:
         self.consumer: Optional[Consumer] = None
         self._assigned_partitions: List[Any] = []
         self._assigned_topics: Set[str] = set()
+        self._partition_lock = threading.Lock()  # Protects _assigned_partitions and _assigned_topics
 
         # Rebalance callbacks for the orchestrator
         self._on_topics_assigned: Optional[Callable[[Set[str], Dict[str, Set[int]]], None]] = None
@@ -129,15 +131,17 @@ class LiveConsumer:
             raise LiveModeError("Consumer not initialized")
 
         def on_assign(consumer, partitions):
-            self._assigned_partitions = partitions
-            new_topics = {p.topic for p in partitions}
-            previously_assigned = self._assigned_topics.copy()
-            self._assigned_topics = new_topics
-
             # Build partition map: {topic_name: {0, 1, 2, ...}}
             partition_map: Dict[str, Set[int]] = {}
             for p in partitions:
                 partition_map.setdefault(p.topic, set()).add(p.partition)
+            new_topics = set(partition_map.keys())
+
+            # Atomically update partition tracking under lock
+            with self._partition_lock:
+                previously_assigned = self._assigned_topics.copy()
+                self._assigned_partitions = partitions
+                self._assigned_topics = new_topics
 
             added = new_topics - previously_assigned
             if added:
@@ -145,8 +149,17 @@ class LiveConsumer:
                     f"Topics assigned: {', '.join(sorted(added))} "
                     f"({len(partitions)} partitions total)"
                 )
-                if self._on_topics_assigned:
+
+            # Notify orchestrator — wrapped in try-except so a callback failure
+            # doesn't leave the consumer in an inconsistent state
+            if self._on_topics_assigned and added:
+                try:
                     self._on_topics_assigned(added, partition_map)
+                except Exception as e:
+                    self.logger.error(
+                        f"on_topics_assigned callback failed: {e}. "
+                        f"Consumer will continue but state may be incomplete."
+                    )
 
         def on_revoke(consumer, partitions):
             revoked_topics = {p.topic for p in partitions}
@@ -168,10 +181,14 @@ class LiveConsumer:
 
             # Notify orchestrator to persist state for revoked topics
             if self._on_topics_revoked:
-                self._on_topics_revoked(revoked_topics, partition_map)
+                try:
+                    self._on_topics_revoked(revoked_topics, partition_map)
+                except Exception as e:
+                    self.logger.error(f"on_topics_revoked callback failed: {e}")
 
-            # Update assigned set
-            self._assigned_topics -= revoked_topics
+            # Atomically update assigned set
+            with self._partition_lock:
+                self._assigned_topics -= revoked_topics
 
         self.consumer.subscribe(
             topics, on_assign=on_assign, on_revoke=on_revoke
@@ -181,15 +198,17 @@ class LiveConsumer:
     @property
     def assigned_topics(self) -> Set[str]:
         """Topics currently assigned to this consumer instance."""
-        return self._assigned_topics.copy()
+        with self._partition_lock:
+            return self._assigned_topics.copy()
 
     @property
     def assigned_partitions(self) -> Dict[str, Set[int]]:
         """Mapping of topic name to assigned partition IDs."""
-        result: Dict[str, Set[int]] = {}
-        for p in self._assigned_partitions:
-            result.setdefault(p.topic, set()).add(p.partition)
-        return result
+        with self._partition_lock:
+            result: Dict[str, Set[int]] = {}
+            for p in self._assigned_partitions:
+                result.setdefault(p.topic, set()).add(p.partition)
+            return result
 
     def poll_batch(
         self, batch_size: int, batch_timeout_seconds: float
@@ -235,8 +254,20 @@ class LiveConsumer:
                 if msg is None:
                     continue
                 if msg.error():
-                    if msg.error().code() == ConfluentKafkaError._PARTITION_EOF:
+                    err_code = msg.error().code()
+                    if err_code == ConfluentKafkaError._PARTITION_EOF:
                         continue
+                    # Critical errors that indicate systemic issues
+                    if err_code in (
+                        ConfluentKafkaError._ALL_BROKERS_DOWN,
+                        ConfluentKafkaError.OFFSET_OUT_OF_RANGE,
+                        ConfluentKafkaError._AUTHENTICATION,
+                        ConfluentKafkaError.TOPIC_AUTHORIZATION_FAILED,
+                        ConfluentKafkaError.GROUP_AUTHORIZATION_FAILED,
+                        ConfluentKafkaError.CLUSTER_AUTHORIZATION_FAILED,
+                    ):
+                        self.logger.error(f"Critical consumer error: {msg.error()}")
+                        raise LiveModeError(f"Consumer error: {msg.error()}")
                     self.logger.warning(f"Consumer error: {msg.error()}")
                     continue
 

@@ -76,52 +76,58 @@ class OptimisticProcessor:
         return Consumer(consumer_config)
     
     def _get_shared_consumer(self) -> Consumer:
-        """Get or create a shared consumer for connection reuse."""
+        """Get or create a shared consumer for connection reuse.
+
+        Thread-safe via _consumer_lock. For use outside of locked contexts.
+        """
         with self._consumer_lock:
             if self._shared_consumer is None:
-                # Create consumer config
-                consumer_config = {
-                    'bootstrap.servers': self.config.kafka.bootstrap_servers,
-                    'group.id': f'schema-infer-shared-{uuid.uuid4().hex[:12]}',
-                    'auto.offset.reset': self.config.kafka.auto_offset_reset,
-                    'session.timeout.ms': 15000,
-                    'heartbeat.interval.ms': 5000,
-                    'log_level': '3',
-                    'log.connection.close': 'false',
-                    'log.thread.name': 'false',
-                    'broker.address.family': 'v4',
-                    'log.queue': 'false',
-                    'statistics.interval.ms': '0',
-                    'enable.auto.commit': 'false',
-                    'enable.partition.eof': 'false',
-                    'fetch.max.bytes': 104857600,
-                    'max.partition.fetch.bytes': 20971520,
-                    'fetch.wait.max.ms': 50,
-                    'fetch.min.bytes': 20480,
-                    'metadata.max.age.ms': 2000,
-                    'reconnect.backoff.ms': 25,
-                    'reconnect.backoff.max.ms': 250,
-                    'socket.timeout.ms': 25000,
-                    'api.version.request.timeout.ms': 5000,
-                    'queued.min.messages': 5000,
-                    'queued.max.messages.kbytes': 131072,
-                    'check.crcs': 'false',
-                }
-                
-                # Add API version settings from config
-                if hasattr(self.config.kafka, 'api_version_request'):
-                    consumer_config['api.version.request'] = self.config.kafka.api_version_request
-                if hasattr(self.config.kafka, 'api_version_fallback_ms'):
-                    consumer_config['api.version.fallback.ms'] = self.config.kafka.api_version_fallback_ms
-                
-                # Add authentication if configured
-                from ..plugin.auth import AuthenticationManager
-                auth_manager = AuthenticationManager(self.config)
-                auth_config = auth_manager.configure_kafka_auth()
-                consumer_config.update(auth_config)
-                
-                self._shared_consumer = self._create_consumer(consumer_config)
+                self._shared_consumer = self._create_shared_consumer()
             return self._shared_consumer
+
+    def _create_shared_consumer(self) -> Consumer:
+        """Create a new shared consumer instance. Caller must hold lock if needed."""
+        consumer_config = {
+            'bootstrap.servers': self.config.kafka.bootstrap_servers,
+            'group.id': f'schema-infer-shared-{uuid.uuid4().hex[:12]}',
+            'auto.offset.reset': self.config.kafka.auto_offset_reset,
+            'session.timeout.ms': 15000,
+            'heartbeat.interval.ms': 5000,
+            'log_level': '3',
+            'log.connection.close': 'false',
+            'log.thread.name': 'false',
+            'broker.address.family': 'v4',
+            'log.queue': 'false',
+            'statistics.interval.ms': '0',
+            'enable.auto.commit': 'false',
+            'enable.partition.eof': 'false',
+            'fetch.max.bytes': 104857600,
+            'max.partition.fetch.bytes': 20971520,
+            'fetch.wait.max.ms': 50,
+            'fetch.min.bytes': 20480,
+            'metadata.max.age.ms': 2000,
+            'reconnect.backoff.ms': 25,
+            'reconnect.backoff.max.ms': 250,
+            'socket.timeout.ms': 25000,
+            'api.version.request.timeout.ms': 5000,
+            'queued.min.messages': 5000,
+            'queued.max.messages.kbytes': 131072,
+            'check.crcs': 'false',
+        }
+
+        # Add API version settings from config
+        if hasattr(self.config.kafka, 'api_version_request'):
+            consumer_config['api.version.request'] = self.config.kafka.api_version_request
+        if hasattr(self.config.kafka, 'api_version_fallback_ms'):
+            consumer_config['api.version.fallback.ms'] = self.config.kafka.api_version_fallback_ms
+
+        # Add authentication if configured
+        from ..plugin.auth import AuthenticationManager
+        auth_manager = AuthenticationManager(self.config)
+        auth_config = auth_manager.configure_kafka_auth()
+        consumer_config.update(auth_config)
+
+        return self._create_consumer(consumer_config)
     
     def _close_shared_consumer(self):
         """Close the shared consumer."""
@@ -658,9 +664,21 @@ class OptimisticProcessor:
         return []
     
     def read_messages_shared_consumer(self, topic_name: str, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
-        """Read messages using shared consumer for better performance."""
-        consumer = self._get_shared_consumer()
-        
+        """Read messages using shared consumer for better performance.
+
+        Uses _consumer_lock to prevent concurrent assign/unassign
+        corruption when multiple threads share the consumer.
+        """
+        with self._consumer_lock:
+            return self._read_messages_shared_consumer_locked(topic_name, max_messages, timeout)
+
+    def _read_messages_shared_consumer_locked(self, topic_name: str, max_messages: int, timeout: int) -> List[Tuple[Optional[bytes], bytes]]:
+        """Internal: read messages while holding _consumer_lock."""
+        # Already holding _consumer_lock, so create consumer directly if needed
+        if self._shared_consumer is None:
+            self._shared_consumer = self._create_shared_consumer()
+        consumer = self._shared_consumer
+
         try:
             # Get topic metadata to find partitions
             metadata = consumer.list_topics(topic_name, timeout=5.0)

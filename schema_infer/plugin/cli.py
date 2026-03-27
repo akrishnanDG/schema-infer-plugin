@@ -1,7 +1,7 @@
 """
 CLI Plugin interface for Schema Inference
-Version: 1.2.0
-Build: 2025-10-12-10:55:00
+Version: 1.4.3
+Build: 2026-02-28
 """
 
 import logging
@@ -27,8 +27,8 @@ from ..utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 # Plugin version information
-PLUGIN_VERSION = "1.4.3"
-PLUGIN_BUILD = "2026-02-28"
+PLUGIN_VERSION = "1.4.4"
+PLUGIN_BUILD = "2026-03-27"
 
 
 def _extract_event_types(main_schema_json: str, topic_name: str) -> set:
@@ -310,7 +310,8 @@ def infer(
     schema-infer infer --data-file sample-data.json --output schema.json --format avro
     """
 
-    config = ctx.obj["config"]
+    # Deep-copy config to prevent mutation leaking across invocations and into threads
+    config = ctx.obj["config"].model_copy(deep=True)
 
     # Update topic filter configuration from CLI parameters
     if internal_prefix is not None:
@@ -345,23 +346,44 @@ def infer(
         if message:
             try:
                 parsed = _json.loads(message)
-                records = [parsed] if isinstance(parsed, dict) else parsed
+                if isinstance(parsed, dict):
+                    records = [parsed]
+                elif isinstance(parsed, list):
+                    # Filter to dicts only; reject arrays of primitives
+                    records = [item for item in parsed if isinstance(item, dict)]
+                    if not records:
+                        click.echo("Error: --message JSON array must contain objects, not primitives", err=True)
+                        sys.exit(1)
+                else:
+                    click.echo(f"Error: --message must be a JSON object or array of objects, got {type(parsed).__name__}", err=True)
+                    sys.exit(1)
             except _json.JSONDecodeError as e:
                 click.echo(f"Error: Invalid JSON in --message: {e}", err=True)
                 sys.exit(1)
         elif data_file:
             try:
-                content = data_file.read_text()
+                content = data_file.read_text(encoding="utf-8")
                 try:
                     parsed = _json.loads(content)
-                    records = [parsed] if isinstance(parsed, dict) else parsed
+                    if isinstance(parsed, dict):
+                        records = [parsed]
+                    elif isinstance(parsed, list):
+                        records = [item for item in parsed if isinstance(item, dict)]
+                    else:
+                        click.echo(f"Error: --data-file must contain a JSON object or array of objects", err=True)
+                        sys.exit(1)
                 except _json.JSONDecodeError:
                     # Try JSONL (one JSON object per line)
                     records = []
-                    for line in content.strip().splitlines():
+                    for line_num, line in enumerate(content.strip().splitlines(), 1):
                         line = line.strip()
                         if line:
-                            records.append(_json.loads(line))
+                            parsed_line = _json.loads(line)
+                            if isinstance(parsed_line, dict):
+                                records.append(parsed_line)
+            except _json.JSONDecodeError as e:
+                click.echo(f"Error: Invalid JSON in {data_file} at line {line_num}: {e}", err=True)
+                sys.exit(1)
             except Exception as e:
                 click.echo(f"Error: Failed to read {data_file}: {e}", err=True)
                 sys.exit(1)
@@ -381,6 +403,13 @@ def infer(
             sys.exit(1)
 
         schema_content = inferrer.generate_schema(schema_dict, format)
+
+        # Validate generated schema before output or registration
+        from ..utils.validators import validate_generated_schema
+        is_valid, validation_error = validate_generated_schema(schema_content, format)
+        if not is_valid:
+            click.echo(f"Error: Generated schema is invalid: {validation_error}", err=True)
+            sys.exit(1)
 
         if output:
             output.parent.mkdir(parents=True, exist_ok=True)
@@ -531,6 +560,15 @@ def infer(
                 success_count = results['successful']
                 error_count = results['failed']
 
+                # Populate error_details from topics that failed inference
+                for tn, msgs in topic_messages.items():
+                    if tn not in results.get('schemas', {}) and tn not in results.get('multi_event', {}):
+                        error_details.append({
+                            'topic': tn,
+                            'reason': 'Schema inference failed — messages may be in unsupported format',
+                            'type': 'schema_inference_failed'
+                        })
+
                 # Register schemas if requested
                 if register and registry:
                     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -596,12 +634,14 @@ def infer(
                                             reg_success += 1
                                         else:
                                             click.echo(f"  FAIL {topic_name}: {result_val}", err=True)
+                                            error_details.append({'topic': topic_name, 'reason': str(result_val), 'type': 'schema_registry_error'})
                                             error_count += 1
                                             success_count -= 1
                                             reg_fail += 1
                                     except Exception as e:
                                         tn = future_to_topic[future]
                                         click.echo(f"  FAIL {tn}: Registration failed - {e}", err=True)
+                                        error_details.append({'topic': tn, 'reason': f"Registration failed: {e}", 'type': 'schema_registry_error'})
                                         error_count += 1
                                         success_count -= 1
                                         reg_fail += 1
@@ -652,6 +692,7 @@ def infer(
                                 )
                             except Exception as e:
                                 click.echo(f"  FAIL {topic_name}: Multi-event registration failed - {e}", err=True)
+                                error_details.append({'topic': topic_name, 'reason': f"Multi-event registration failed: {e}", 'type': 'schema_registry_error'})
                                 reg_fail += 1
 
                         reg_elapsed = time.time() - reg_start
@@ -885,7 +926,6 @@ def infer(
 
                         success_count += 1
 
-                    success_count += 1
                     progress_bar.set_postfix({
                         'messages': len(messages),
                         'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
@@ -924,9 +964,10 @@ def infer(
 
                     if not config.performance.show_progress:
                         click.echo(f"  FAIL {topic_name}: {error_reason}", err=True)
+                    elapsed = time.time() - topic_start_time
                     progress_bar.set_postfix({
                         'topic': topic_name[:20] + '...' if len(topic_name) > 20 else topic_name,
-                        'time': f'{topic_elapsed:.1f}s',
+                        'time': f'{elapsed:.1f}s',
                         'status': 'error'
                     })
                     error_count += 1

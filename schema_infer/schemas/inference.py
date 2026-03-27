@@ -149,10 +149,10 @@ class SchemaInferrer:
         self.null_handling = null_handling
         self.logger = get_logger(__name__)
 
-    # Datetime patterns (ISO 8601 and common formats)
+    # Datetime patterns (ISO 8601 / RFC 3339 and common formats)
     _DATETIME_PATTERNS = [
-        re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),   # 2025-12-01T10:00:00
-        re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'),    # 2025-12-01 10:00:00
+        re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?'),  # ISO 8601 with optional tz
+        re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?'),   # Space-separated with optional tz
         re.compile(r'^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}'),    # 12/01/2025 10:00:00
         re.compile(r'^\d{2}-\d{2}-\d{4} \d{2}:\d{2}:\d{2}'),    # 01-12-2025 10:00:00
     ]
@@ -475,14 +475,16 @@ class SchemaInferrer:
             return FieldType("string")
         elif isinstance(value, list):
             if not value:
-                return FieldType("array", array=True)
-            
+                return FieldType("string", array=True)
+
             # Analyze array elements
             element_types = [self._get_value_type(item, depth + 1) for item in value]
-            
+
             if self.array_handling == "union":
                 # Find the most common type
                 type_counts = Counter(str(t) for t in element_types)
+                if not type_counts:
+                    return FieldType("string", array=True)
                 most_common_type = type_counts.most_common(1)[0][0]
                 return FieldType(most_common_type, array=True)
             elif self.array_handling == "first":

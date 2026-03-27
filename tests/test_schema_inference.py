@@ -64,8 +64,8 @@ class TestSchemaInference:
         # Union strategy picks the most common element type (first when tied)
         assert field_types["mixed_array"].name == "float"
 
-        # Empty arrays get type name "array"
-        assert field_types["empty_array"].name == "array"
+        # Empty arrays default to string element type
+        assert field_types["empty_array"].name == "string"
 
         # Nested arrays: inner arrays are "array<float>", so type name is "array<float>"
         assert field_types["nested_array"].name == "array<float>"

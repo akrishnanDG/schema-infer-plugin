@@ -212,7 +212,13 @@ class LiveModeOrchestrator:
 
                     if topic_messages:
                         self._process_batch(topic_messages)
-                        consumer.commit()
+                        try:
+                            consumer.commit()
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Failed to commit offsets (batch was processed, "
+                                f"may reprocess on restart): {e}"
+                            )
 
                     # Periodic topic re-discovery
                     now = time.time()
@@ -282,23 +288,40 @@ class LiveModeOrchestrator:
         Then removes the state from memory.
         """
         if not self.state_store:
+            # Even without state store, clean metadata
+            with self._metadata_lock:
+                for topic_name in topics:
+                    self._topic_formats.pop(topic_name, None)
+                    self._topic_discriminators.pop(topic_name, None)
+                    self._disc_record_buffer.pop(topic_name, None)
+                    self._topic_flat_registered.discard(topic_name)
+                    self._topic_event_types.pop(topic_name, None)
+                    self._topic_last_activity.pop(topic_name, None)
+                    self._topic_partitions.pop(topic_name, None)
             return
 
-        persisted = 0
+        # Snapshot dirty states quickly under lock, then persist outside lock
+        # to avoid blocking the consumer heartbeat thread with I/O
+        to_persist = []
         with self._states_lock:
             for topic_name in topics:
                 state = self._states.get(topic_name)
                 if state and state.dirty:
-                    try:
-                        self.state_store.save(state)
-                        state.dirty = False
-                        persisted += 1
-                    except Exception as e:
-                        self.logger.warning(
-                            f"Failed to persist state for {topic_name} on revoke: {e}"
-                        )
+                    to_persist.append((topic_name, state))
                 # Remove from memory -- new owner will load from disk
                 self._states.pop(topic_name, None)
+
+        # Persist outside lock (I/O)
+        persisted = 0
+        for topic_name, state in to_persist:
+            try:
+                self.state_store.save(state)
+                state.dirty = False
+                persisted += 1
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to persist state for {topic_name} on revoke: {e}"
+                )
 
         # Clean all metadata dicts for revoked topics
         with self._metadata_lock:
@@ -549,8 +572,10 @@ class LiveModeOrchestrator:
                 if self.output_dir:
                     self._write_schema_file(f"{topic_name}.{event_type}", new_schema)
 
+        # Use atomic set union to avoid lost updates from concurrent workers
         with self._metadata_lock:
-            self._topic_event_types[topic_name] = known_types
+            current_types = self._topic_event_types.get(topic_name, set())
+            self._topic_event_types[topic_name] = current_types | known_types
 
         # Register if changes detected or new event type appeared (partition-0 owner only)
         if (any_changes or new_event_type_discovered) and self.register and self.registry:
@@ -646,6 +671,9 @@ class LiveModeOrchestrator:
         previous_compat = None
         with self._metadata_lock:
             was_flat_registered = topic_name in self._topic_flat_registered
+            # Mark as no longer flat immediately to prevent concurrent transitions
+            if was_flat_registered:
+                self._topic_flat_registered.discard(topic_name)
 
         # Optimistic check: verify SR hasn't already been transitioned by another instance
         if was_flat_registered:
@@ -683,8 +711,6 @@ class LiveModeOrchestrator:
                 )
                 with self._stats_lock:
                     self._total_registrations += len(reg_result)
-                with self._metadata_lock:
-                    self._topic_flat_registered.discard(topic_name)
                 click.echo(
                     f"[{_ts()}] {topic_name}: Registered {len(reg_result)} multi-event schemas "
                     f"({len(sub_contents)} sub + 1 main)"
@@ -1026,20 +1052,24 @@ class LiveModeOrchestrator:
         if not self.state_store:
             return
 
-        dirty_count = 0
+        # Snapshot dirty states under lock, then persist outside lock
+        to_persist = []
         with self._states_lock:
-            states_snapshot = list(self._states.items())
+            for topic_name, state in self._states.items():
+                if state.dirty:
+                    to_persist.append((topic_name, state))
 
-        for topic_name, state in states_snapshot:
-            if state.dirty:
-                try:
-                    self.state_store.save(state)
+        dirty_count = 0
+        for topic_name, state in to_persist:
+            try:
+                self.state_store.save(state)
+                with self._states_lock:
                     state.dirty = False
-                    dirty_count += 1
-                except Exception as e:
-                    self.logger.warning(
-                        f"Failed to persist state for {topic_name}: {e}"
-                    )
+                dirty_count += 1
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to persist state for {topic_name}: {e}"
+                )
 
         if dirty_count > 0:
             click.echo(f"  Persisting state for {dirty_count} topics... done")
@@ -1062,21 +1092,27 @@ class LiveModeOrchestrator:
         if not to_evict:
             return
 
+        # Remove states from memory under lock, then persist outside lock
+        states_to_persist = []
         with self._states_lock:
             for topic_name in to_evict:
                 state = self._states.get(topic_name)
                 if state is None:
                     continue
                 if state.dirty:
-                    try:
-                        self.state_store.save(state)
-                        state.dirty = False
-                    except Exception as e:
-                        self.logger.warning(
-                            f"Failed to persist state for {topic_name} before eviction: {e}"
-                        )
+                    states_to_persist.append((topic_name, state))
                 del self._states[topic_name]
                 self.logger.debug(f"Evicted idle state for {topic_name}")
+
+        # Persist outside lock (I/O)
+        for topic_name, state in states_to_persist:
+            try:
+                self.state_store.save(state)
+                state.dirty = False
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to persist state for {topic_name} before eviction: {e}"
+                )
 
     def _print_startup(self) -> None:
         """Print startup banner."""
