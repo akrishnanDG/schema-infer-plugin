@@ -385,7 +385,7 @@ def infer(
                     file_size = data_file.stat().st_size
                     if file_size > 500 * 1024 * 1024:  # 500MB limit
                         click.echo(
-                            f"Error: --data-file is {file_size // (1024*1024)}MB, "
+                            f"Error: --data-file is {file_size // (1024 * 1024)}MB, "
                             f"max 500MB. Use JSONL format (one object per line) for large files.",
                             err=True,
                         )
