@@ -334,13 +334,7 @@ class SchemaRegistry:
         try:
             url = f"{self.base_url}/schemas/ids/{schema_id}"
 
-            response = requests.get(
-                url,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
-                timeout=(5, 30),
-            )
+            response = self._session.get(url, timeout=(5, 30))
 
             response.raise_for_status()
             return response.json()
@@ -408,13 +402,7 @@ class SchemaRegistry:
         try:
             url = f"{self.base_url}/subjects"
 
-            response = requests.get(
-                url,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
-                timeout=(5, 30),
-            )
+            response = self._session.get(url, timeout=(5, 30))
 
             response.raise_for_status()
             return response.json()
@@ -440,13 +428,7 @@ class SchemaRegistry:
             if permanent:
                 url += "?permanent=true"
 
-            response = requests.delete(
-                url,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
-                timeout=(5, 30),
-            )
+            response = self._session.delete(url, timeout=(5, 30))
 
             response.raise_for_status()
             return response.json()
@@ -527,13 +509,7 @@ class SchemaRegistry:
             else:
                 url = f"{self.base_url}/config"
 
-            response = requests.get(
-                url,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
-                timeout=(5, 30),
-            )
+            response = self._session.get(url, timeout=(5, 30))
 
             response.raise_for_status()
             return response.json()
@@ -559,12 +535,9 @@ class SchemaRegistry:
             else:
                 url = f"{self.base_url}/config"
 
-            response = requests.put(
+            response = self._session.put(
                 url,
                 json=config_data,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
                 headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
                 timeout=(5, 30),
             )
@@ -586,9 +559,7 @@ class SchemaRegistry:
         try:
             url = f"{self.base_url}/subjects"
 
-            response = requests.get(
-                url, auth=self.auth, cert=self.cert, verify=self.verify_ssl, timeout=10
-            )
+            response = self._session.get(url, timeout=10)
 
             response.raise_for_status()
             self.logger.info("Schema Registry connection test successful")
@@ -637,12 +608,9 @@ class SchemaRegistry:
                 f"Setting compatibility level for subject '{subject}' to: {compatibility}"
             )
 
-            response = requests.put(
+            response = self._session.put(
                 url,
                 json=compatibility_data,
-                auth=self.auth,
-                cert=self.cert,
-                verify=self.verify_ssl,
                 headers={"Content-Type": "application/vnd.schemaregistry.v1+json"},
                 timeout=(5, 30),
             )
@@ -669,9 +637,7 @@ class SchemaRegistry:
         try:
             # Try to get the Schema Registry version/info
             url = f"{self.base_url}/subjects"
-            response = requests.get(
-                url, auth=self.auth, cert=self.cert, verify=self.verify_ssl, timeout=10
-            )
+            response = self._session.get(url, timeout=10)
             response.raise_for_status()
             self.logger.info("Schema Registry connection test successful")
         except requests.exceptions.RequestException as e:

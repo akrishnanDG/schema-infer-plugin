@@ -1166,10 +1166,16 @@ class LiveModeOrchestrator:
                 del self._states[topic_name]
                 self.logger.debug(f"Evicted idle state for {topic_name}")
 
-        # Clean activity metadata for evicted topics
+        # Clean all metadata dicts for evicted topics
         with self._metadata_lock:
             for topic_name in to_evict:
                 self._topic_last_activity.pop(topic_name, None)
+                self._topic_formats.pop(topic_name, None)
+                self._topic_discriminators.pop(topic_name, None)
+                self._disc_record_buffer.pop(topic_name, None)
+                self._topic_event_types.pop(topic_name, None)
+                self._topic_flat_registered.discard(topic_name)
+                self._topic_partitions.pop(topic_name, None)
 
         # Persist outside lock (I/O)
         for topic_name, state in states_to_persist:
@@ -1219,10 +1225,14 @@ class LiveModeOrchestrator:
         )
         with self._states_lock:
             states_in_mem = len(self._states)
+        with self._stats_lock:
+            total_messages = self._total_messages
+            total_changes = self._total_changes
+            total_registrations = self._total_registrations
         click.echo(
-            f"[{_ts()}] Summary: {self._total_messages} messages processed, "
-            f"{self._total_changes} schema changes, "
-            f"{self._total_registrations} registrations, "
+            f"[{_ts()}] Summary: {total_messages} messages processed, "
+            f"{total_changes} schema changes, "
+            f"{total_registrations} registrations, "
             f"{active}/{len(self.topics)} topics active, "
             f"{states_in_mem} states in memory, "
             f"uptime {_format_duration(elapsed)}"
@@ -1234,15 +1244,19 @@ class LiveModeOrchestrator:
         click.echo(f"\nLive mode stopped.")
         with self._metadata_lock:
             topic_count_seen = len(self._topic_last_activity)
+        with self._stats_lock:
+            total_messages = self._total_messages
+            total_registrations = self._total_registrations
+            total_changes = self._total_changes
         click.echo(
-            f"  Processed {self._total_messages} messages across "
+            f"  Processed {total_messages} messages across "
             f"{topic_count_seen} topics "
             f"in {_format_duration(elapsed)}"
         )
-        if self._total_registrations > 0:
-            click.echo(f"  Registered {self._total_registrations} schema versions")
-        if self._total_changes > 0:
-            click.echo(f"  Detected {self._total_changes} schema changes")
+        if total_registrations > 0:
+            click.echo(f"  Registered {total_registrations} schema versions")
+        if total_changes > 0:
+            click.echo(f"  Detected {total_changes} schema changes")
 
 
 def _ts() -> str:

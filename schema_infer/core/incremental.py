@@ -232,54 +232,57 @@ class IncrementalSchemaState:
 
         Returns None if no structural changes, otherwise a SchemaChangeReport.
         """
-        if self.last_schema is None:
-            # First schema -- report all fields as added
-            report = SchemaChangeReport(
-                added_fields=[f.name for f in new_schema.fields]
-            )
-            self.last_schema = new_schema
-            return report
+        with self._lock:
+            if self.last_schema is None:
+                # First schema -- report all fields as added
+                report = SchemaChangeReport(
+                    added_fields=[f.name for f in new_schema.fields]
+                )
+                self.last_schema = new_schema
+                return report
 
-        old_fields = {f.name: f for f in self.last_schema.fields}
-        new_fields = {f.name: f for f in new_schema.fields}
+            old_fields = {f.name: f for f in self.last_schema.fields}
+            new_fields = {f.name: f for f in new_schema.fields}
 
-        old_names = set(old_fields.keys())
-        new_names = set(new_fields.keys())
+            old_names = set(old_fields.keys())
+            new_names = set(new_fields.keys())
 
-        added = sorted(new_names - old_names)
-        removed = sorted(old_names - new_names)
+            added = sorted(new_names - old_names)
+            removed = sorted(old_names - new_names)
 
-        type_changes = []
-        nullability_changes = []
+            type_changes = []
+            nullability_changes = []
 
-        for name in sorted(old_names & new_names):
-            old_f = old_fields[name]
-            new_f = new_fields[name]
+            for name in sorted(old_names & new_names):
+                old_f = old_fields[name]
+                new_f = new_fields[name]
 
-            if old_f.field_type != new_f.field_type:
-                # Check if only nullability changed
-                if (
-                    old_f.field_type.name == new_f.field_type.name
-                    and old_f.field_type.array == new_f.field_type.array
-                    and old_f.field_type.nullable != new_f.field_type.nullable
-                ):
-                    nullability_changes.append(name)
-                else:
-                    type_changes.append(
-                        TypeChange(
-                            field_name=name,
-                            old_type=str(old_f.field_type),
-                            new_type=str(new_f.field_type),
+                if old_f.field_type != new_f.field_type:
+                    # Check if only nullability changed
+                    if (
+                        old_f.field_type.name == new_f.field_type.name
+                        and old_f.field_type.array == new_f.field_type.array
+                        and old_f.field_type.nullable != new_f.field_type.nullable
+                    ):
+                        nullability_changes.append(name)
+                    else:
+                        type_changes.append(
+                            TypeChange(
+                                field_name=name,
+                                old_type=str(old_f.field_type),
+                                new_type=str(new_f.field_type),
+                            )
                         )
-                    )
 
-        report = SchemaChangeReport(added, removed, type_changes, nullability_changes)
+            report = SchemaChangeReport(
+                added, removed, type_changes, nullability_changes
+            )
 
-        if report.has_changes:
-            self.last_schema = new_schema
-            return report
+            if report.has_changes:
+                self.last_schema = new_schema
+                return report
 
-        return None
+            return None
 
     def _merge_field_analysis(self, batch_analysis: Dict[str, Dict[str, Any]]) -> None:
         """Merge batch field analysis into the running state."""

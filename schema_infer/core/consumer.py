@@ -183,6 +183,24 @@ class KafkaConsumer:
                     topic_name, max_messages_per_topic, timeout
                 )
                 results[topic_name] = messages
+            except KafkaError as e:
+                error_str = str(e).lower()
+                # Re-raise critical errors (auth failures, broker unreachable)
+                if any(
+                    indicator in error_str
+                    for indicator in [
+                        "authentication",
+                        "authorization",
+                        "broker transport failure",
+                        "all brokers down",
+                        "resolve",
+                        "timed out",
+                        "ssl handshake",
+                    ]
+                ):
+                    raise
+                self.logger.error(f"Failed to consume from topic {topic_name}: {e}")
+                results[topic_name] = []
             except Exception as e:
                 self.logger.error(f"Failed to consume from topic {topic_name}: {e}")
                 results[topic_name] = []

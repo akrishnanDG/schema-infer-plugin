@@ -513,7 +513,7 @@ def save_config(config: Config, config_path: Path) -> None:
     config_dict = config.model_dump()
 
     # Redact sensitive fields
-    sensitive_fields = ["password", "secret", "ssl_key_password"]
+    sensitive_fields = ["password", "secret", "ssl_key_password", "api_key"]
 
     def redact(d):
         for key, value in d.items():

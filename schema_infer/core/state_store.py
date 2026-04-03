@@ -101,12 +101,20 @@ class StateStore:
             self.logger.warning(f"Failed to delete state for {topic_name}: {e}")
 
     def list_topics(self) -> List[str]:
-        """List all topics with persisted state."""
+        """List all topics with persisted state.
+
+        Handles both old format (safe_name.state.json) and new format
+        (safe_name_hash.state.json) filenames.
+        """
         topics = []
         for f in self.state_dir.glob("*.state.json"):
             # Reverse the safe-name encoding
-            topic_name = f.stem.replace(".state", "")
-            topics.append(topic_name)
+            stem = f.stem.replace(".state", "")
+            # New format has an 8-char hex hash suffix after underscore
+            # e.g., "my_topic_a1b2c3d4" -> strip "_a1b2c3d4"
+            if re.match(r".*_[0-9a-f]{8}$", stem):
+                stem = stem[:-9]  # Remove underscore + 8-char hash
+            topics.append(stem)
         return sorted(topics)
 
     def _state_path(self, topic_name: str) -> Path:
@@ -114,10 +122,24 @@ class StateStore:
 
         Uses a hash suffix to prevent collisions when different topic names
         (e.g., 'topic-a.b' and 'topic_a.b') sanitize to the same filename.
+
+        Falls back to the old path (without hash) if the new path doesn't
+        exist yet, preserving backward compatibility with existing state files.
         """
         import hashlib
 
         safe_name = re.sub(r"[^\w\-.]", "_", topic_name)
         # Append short hash to prevent collisions from sanitization
         name_hash = hashlib.sha256(topic_name.encode()).hexdigest()[:8]
-        return self.state_dir / f"{safe_name}_{name_hash}.state.json"
+        new_path = self.state_dir / f"{safe_name}_{name_hash}.state.json"
+
+        if new_path.exists():
+            return new_path
+
+        # Fall back to old path (without hash) for backward compatibility
+        old_path = self.state_dir / f"{safe_name}.state.json"
+        if old_path.exists():
+            return old_path
+
+        # Neither exists; return new path for new files
+        return new_path

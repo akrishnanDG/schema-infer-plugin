@@ -174,7 +174,13 @@ class AuthenticationManager:
             config["username"] = api_key
             config["password"] = api_secret
         else:
-            self.logger.warning("Cloud API key/secret not found for Schema Registry")
+            from ..utils.exceptions import ConfigurationError
+
+            raise ConfigurationError(
+                "Cloud API key and secret are required for Schema Registry. "
+                "Set 'cloud_api_key' and 'cloud_api_secret' under the 'schema_registry' "
+                "section in your config file, or under 'kafka' as a fallback."
+            )
 
         return config
 

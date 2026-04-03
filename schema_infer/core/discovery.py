@@ -192,7 +192,7 @@ class TopicDiscovery:
                 all_topics = consumer.list_topics()
 
                 # Filter by pattern
-                matching_topics = [t for t in all_topics if regex.match(t)]
+                matching_topics = [t for t in all_topics if regex.fullmatch(t)]
 
                 # Apply topic filtering
                 filtered_topics = []

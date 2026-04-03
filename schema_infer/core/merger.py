@@ -114,6 +114,16 @@ class SchemaMerger:
             existing_type = self._extract_primary_type(existing_def)
             new_type = self._extract_primary_type(new_def)
 
+            # Both are multi-type unions (empty string from _extract_primary_type):
+            # merge the two type lists into a deduplicated union
+            if not existing_type and not new_type:
+                existing_types = existing_def.get("type", [])
+                new_types = new_def.get("type", [])
+                if isinstance(existing_types, list) and isinstance(new_types, list):
+                    union_types = list(dict.fromkeys(existing_types + new_types))
+                    merged[field_name] = {"type": union_types}
+                continue
+
             # Different types: widen to union (both types become nullable)
             # to preserve compatibility while not losing the new type info
             if existing_type and new_type and existing_type != new_type:

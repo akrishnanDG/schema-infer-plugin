@@ -106,7 +106,7 @@ class TestSchemaRegistry:
         self.config.schema_registry.username = None
         self.config.schema_registry.password = None
 
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_connection_test_success(self, mock_get):
         """Test successful connection test."""
         mock_response = Mock()
@@ -119,7 +119,7 @@ class TestSchemaRegistry:
         assert registry is not None
         mock_get.assert_called_once()
 
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_connection_test_failure(self, mock_get):
         """Test connection test failure."""
         mock_get.side_effect = Exception("Connection failed")
@@ -129,7 +129,7 @@ class TestSchemaRegistry:
         assert registry is not None
 
     @patch("schema_infer.core.registry.requests.Session.request")
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_register_schema_success(self, mock_get, mock_request):
         """Test successful schema registration."""
         # Mock the connection test GET request
@@ -152,7 +152,7 @@ class TestSchemaRegistry:
         mock_request.assert_called()
 
     @patch("schema_infer.core.registry.requests.Session.request")
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_register_schema_failure(self, mock_get, mock_request):
         """Test schema registration failure."""
         # Mock the connection test GET request
@@ -169,7 +169,7 @@ class TestSchemaRegistry:
         with pytest.raises(Exception):
             registry.register_schema("test-topic", schema_content, "avro")
 
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_generate_subject_name_topic_name_strategy(self, mock_get):
         """Test subject name generation with TopicNameStrategy."""
         mock_response = Mock()
@@ -182,7 +182,7 @@ class TestSchemaRegistry:
         subject_name = registry._generate_subject_name("test-topic", "avro")
         assert subject_name == "test-topic-value"
 
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_generate_subject_name_record_name_strategy(self, mock_get):
         """Test subject name generation with RecordNameStrategy."""
         mock_response = Mock()
@@ -195,7 +195,7 @@ class TestSchemaRegistry:
         subject_name = registry._generate_subject_name("test-topic", "avro")
         assert subject_name == "test-topic"
 
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_generate_subject_name_topic_record_name_strategy(self, mock_get):
         """Test subject name generation with TopicRecordNameStrategy."""
         mock_response = Mock()
@@ -466,7 +466,7 @@ class TestCoreComponentsIntegration:
         self.config.schema_registry.url = "http://localhost:8081"
 
     @patch("schema_infer.core.discovery.KafkaConsumer")
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_end_to_end_workflow(self, mock_registry_get, mock_consumer_class):
         """Test end-to-end workflow with mocked components."""
         # Mock consumer with context manager support
@@ -699,7 +699,7 @@ class TestSchemaRegistryMethods:
         self.config.schema_registry.username = None
         self.config.schema_registry.password = None
 
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_get_schema(self, mock_get):
         """Test getting a schema by ID."""
         # Mock _test_connection
@@ -719,7 +719,7 @@ class TestSchemaRegistryMethods:
         result = registry.get_schema(1)
         assert result["schemaType"] == "AVRO"
 
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_list_subjects(self, mock_get):
         """Test listing subjects."""
         mock_get.return_value = MagicMock(status_code=200)
@@ -735,8 +735,8 @@ class TestSchemaRegistryMethods:
         assert len(result) == 2
         assert "subject-1" in result
 
-    @patch("schema_infer.core.registry.requests.delete")
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.delete")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_delete_subject(self, mock_get, mock_delete):
         """Test deleting a subject."""
         mock_get.return_value = MagicMock(status_code=200, json=lambda: [])
@@ -754,7 +754,7 @@ class TestSchemaRegistryMethods:
         assert result == [1, 2]
 
     @patch("schema_infer.core.registry.requests.Session.request")
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_check_compatibility(self, mock_get, mock_request):
         """Test checking schema compatibility."""
         mock_get.return_value = MagicMock(status_code=200, json=lambda: [])
@@ -772,7 +772,7 @@ class TestSchemaRegistryMethods:
         result = registry.check_compatibility("test-subject", '{"type":"string"}')
         assert result == True
 
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_get_config(self, mock_get):
         """Test getting SR config."""
         mock_get.return_value = MagicMock(status_code=200, json=lambda: [])
@@ -791,8 +791,8 @@ class TestSchemaRegistryMethods:
         result = registry.get_config()
         assert result["compatibilityLevel"] == "BACKWARD"
 
-    @patch("schema_infer.core.registry.requests.put")
-    @patch("schema_infer.core.registry.requests.get")
+    @patch("schema_infer.core.registry.requests.Session.put")
+    @patch("schema_infer.core.registry.requests.Session.get")
     def test_set_config(self, mock_get, mock_put):
         """Test setting SR config."""
         mock_get.return_value = MagicMock(status_code=200, json=lambda: [])

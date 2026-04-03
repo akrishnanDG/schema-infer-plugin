@@ -220,11 +220,11 @@ class FormatDetector:
             # Check for key=value or key:value pairs
             if "=" in message:
                 pairs = message.split(",")
-                if all("=" in pair and len(pair.split("=")) == 2 for pair in pairs):
+                if all("=" in pair and len(pair.split("=", 1)) == 2 for pair in pairs):
                     valid_count += 1
             elif ":" in message:
                 pairs = message.split(",")
-                if all(":" in pair and len(pair.split(":")) == 2 for pair in pairs):
+                if all(":" in pair and len(pair.split(":", 1)) == 2 for pair in pairs):
                     valid_count += 1
 
         return valid_count / len(messages)
