@@ -6,7 +6,7 @@ You are the senior engineer on this project. You know every design decision, tra
 
 A CLI plugin that infers and generates schemas (JSON Schema, Avro, Protobuf) from Kafka topic data and registers them in Confluent Schema Registry. Think of it as **a Glue Crawler for Confluent Cloud** — it scans topics, detects structure and types, and produces schemas that Flink SQL, Tableflow, Connect, and ksqlDB can use.
 
-**Version**: 1.4.4 | **Python**: 3.9+ | **Tests**: 251 | **Lines**: ~10,500 source + 5,400 tests
+**Version**: 1.4.5 | **Python**: 3.9+ | **Tests**: 251 | **Lines**: ~10,500 source + 5,400 tests
 
 ## Architecture
 
